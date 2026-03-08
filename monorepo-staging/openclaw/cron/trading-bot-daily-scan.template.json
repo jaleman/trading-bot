@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "jobs": [
+    {
+      "id": "trading-bot-daily-scan",
+      "name": "Daily Trading Scan",
+      "schedule": {
+        "kind": "cron",
+        "expr": "35 9 * * 1-5",
+        "tz": "America/Detroit"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "next-heartbeat",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Run the staged monorepo trading bot scan with ~/trading-bot/monorepo-staging/scripts/run_trading_bot_rehearsal.sh\n\nAfter it completes, run ~/trading-bot/monorepo-staging/scripts/print_trading_bot_operator_summary.sh and send that summary to Telegram. Do not improvise from raw logs when the summary wrapper is available. If the summary says safe mode remained active, preserve that wording explicitly."
+      },
+      "delivery": {
+        "mode": "announce",
+        "channel": "telegram",
+        "to": "[REDACTED]",
+        "bestEffort": true
+      },
+      "state": {
+        "nextRunAtMs": 0,
+        "lastRunAtMs": 0,
+        "lastRunStatus": "unknown",
+        "lastStatus": "unknown",
+        "lastDurationMs": 0,
+        "lastDeliveryStatus": "unknown",
+        "consecutiveErrors": 0
+      },
+      "enabled": false,
+      "updatedAtMs": 0
+    }
+  ]
+}

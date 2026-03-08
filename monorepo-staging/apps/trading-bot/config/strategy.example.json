@@ -1,0 +1,33 @@
+{
+  "watchlist": ["NVDA", "MSFT", "UNH", "JNJ", "KO", "COST", "JPM", "V", "CAT", "HON", "BRK.B", "SPY"],
+  "max_positions": 4,
+  "max_trades_per_day": 2,
+  "max_position_size_pct": 25,
+  "entry": {
+    "ma_crossover": { "short": 20, "long": 50 },
+    "rsi_threshold": 30
+  },
+  "exit": {
+    "profit_target_pct": 10,
+    "stop_loss_pct": 4.5
+  },
+  "models": {
+    "daily_decision": "claude-sonnet-4-6",
+    "monitoring": "qwen2.5:7b"
+  },
+  "cost_controls": {
+    "daily_claude_call_limit": 5,
+    "context_reset_after_exchanges": 20,
+    "prompt_caching_enabled": true
+  },
+  "execution_controls": {
+    "safe_mode": true,
+    "paper_trade_execution_enabled": false,
+    "write_logs_by_default": true
+  },
+  "paper_to_live": {
+    "min_return_pct": 3.75,
+    "evaluation_days": 90,
+    "max_consecutive_losses": 2
+  }
+}

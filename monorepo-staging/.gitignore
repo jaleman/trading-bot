@@ -1,0 +1,16 @@
+# Local environment
+.env
+.env.*
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+apps/trading-bot/config/strategy.local.json
+
+# Runtime state
+runtime/**
+!runtime/README.md
+
+# OS/editor
+.DS_Store
+.vscode/

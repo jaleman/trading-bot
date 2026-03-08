@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "profiles": {
+    "anthropic:default": {
+      "type": "[REDACTED]",
+      "provider": "anthropic",
+      "key": "[REDACTED]"
+    }
+  },
+  "usageStats": {
+    "anthropic:default": {
+      "lastUsed": 0,
+      "errorCount": 0
+    }
+  }
+}

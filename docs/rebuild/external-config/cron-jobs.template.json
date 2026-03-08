@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "jobs": [
+    {
+      "id": "trading-bot-daily-scan",
+      "name": "Daily Trading Scan",
+      "schedule": {
+        "kind": "cron",
+        "expr": "35 9 * * 1-5",
+        "tz": "America/Detroit"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "next-heartbeat",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Run the daily trading bot scan: cd ~/trading-bot && source .venv/bin/activate && python main.py\n\nAfter it completes, read the last 30 lines of ~/trading-bot/logs/trades.log and send a summary to the user via Telegram. Include: which stocks were scanned, any that triggered signals, and whether any trades were placed. Keep it concise — 3-5 lines max. If there were no signals, just say 'No signals today. All 12 stocks scanned.'"
+      },
+      "delivery": {
+        "mode": "announce",
+        "channel": "telegram",
+        "to": "[REDACTED]",
+        "bestEffort": true
+      },
+      "state": {
+        "nextRunAtMs": 0,
+        "lastRunAtMs": 0,
+        "lastRunStatus": "ok",
+        "lastStatus": "ok",
+        "lastDurationMs": 0,
+        "lastDeliveryStatus": "unknown",
+        "consecutiveErrors": 0
+      },
+      "enabled": true,
+      "updatedAtMs": 0
+    }
+  ]
+}

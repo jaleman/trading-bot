@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "trading-bot"
+version = "0.1.0"
+description = "Rebuilt trading bot app for the staged monorepo production-candidate runtime"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+	"alpaca-py>=0.43",
+	"anthropic>=0.84",
+	"pandas>=2.2",
+	"python-dotenv>=1.0",
+	"requests>=2.31",
+]
+
+[project.scripts]
+trading-bot = "trading_bot.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

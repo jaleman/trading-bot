@@ -1,0 +1,28 @@
+{
+  "watchlist": ["NVDA", "MSFT", "UNH", "JNJ", "KO", "COST", "JPM", "V", "CAT", "HON", "BRK.B", "SPY"],
+  "max_positions": 4,
+  "entry": {
+    "ma_crossover": { "short": 20, "long": 50 },
+    "rsi_threshold": 30
+  },
+  "exit": {
+    "profit_target_pct": 10,
+    "stop_loss_pct": 4.5
+  },
+  "models": {
+    "daily_decision": "claude-sonnet-4-6",
+    "complex_analysis": "claude-opus-4-6",
+    "routine_summary": "claude-haiku-4-5-20251001",
+    "monitoring": "ollama/llama3.2"
+  },
+  "cost_controls": {
+    "daily_claude_call_limit": 5,
+    "context_reset_after_exchanges": 20,
+    "prompt_caching_enabled": true
+  },
+  "paper_to_live": {
+    "min_return_pct": 3.75,
+    "evaluation_days": 90,
+    "max_consecutive_losses": 2
+  }
+}

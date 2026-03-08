@@ -1,0 +1,102 @@
+{
+  "wizard": {
+    "lastRunAt": "[REDACTED]",
+    "lastRunVersion": "2026.3.1",
+    "lastRunCommand": "[REDACTED]",
+    "lastRunMode": "[REDACTED]"
+  },
+  "auth": {
+    "profiles": {
+      "anthropic:default": {
+        "provider": "anthropic",
+        "mode": "[REDACTED]"
+      }
+    }
+  },
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "[REDACTED]"
+      },
+      "models": {
+        "anthropic/claude-sonnet-4-6": {}
+      },
+      "workspace": "~/.openclaw/workspace",
+      "compaction": {
+        "mode": "[REDACTED]"
+      },
+      "maxConcurrent": 4,
+      "subagents": {
+        "maxConcurrent": 8
+      }
+    }
+  },
+  "messages": {
+    "ackReactionScope": "[REDACTED]"
+  },
+  "commands": {
+    "native": "[REDACTED]",
+    "nativeSkills": "[REDACTED]",
+    "restart": true,
+    "ownerDisplay": "[REDACTED]"
+  },
+  "session": {
+    "dmScope": "[REDACTED]"
+  },
+  "hooks": {
+    "internal": {
+      "enabled": true,
+      "entries": {
+        "command-logger": {
+          "enabled": true
+        },
+        "session-memory": {
+          "enabled": true
+        }
+      }
+    }
+  },
+  "channels": {
+    "telegram": {
+      "enabled": true,
+      "dmPolicy": "[REDACTED]",
+      "botToken": "[REDACTED]",
+      "groupPolicy": "[REDACTED]",
+      "streaming": "[REDACTED]"
+    }
+  },
+  "gateway": {
+    "port": 18789,
+    "mode": "[REDACTED]",
+    "bind": "[REDACTED]",
+    "auth": {
+      "mode": "[REDACTED]",
+      "token": "[REDACTED]"
+    },
+    "tailscale": {
+      "mode": "[REDACTED]",
+      "resetOnExit": false
+    },
+    "nodes": {
+      "denyCommands": [
+        "camera.snap",
+        "camera.clip",
+        "screen.record",
+        "calendar.add",
+        "contacts.add",
+        "reminders.add"
+      ]
+    }
+  },
+  "plugins": {
+    "entries": {
+      "telegram": {
+        "enabled": true
+      }
+    }
+  },
+  "meta": {
+    "lastTouchedVersion": "[REDACTED]",
+    "lastTouchedAt": "[REDACTED]"
+  }
+}
