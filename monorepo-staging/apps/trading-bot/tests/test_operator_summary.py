@@ -52,6 +52,7 @@ class OperatorSummaryTests(unittest.TestCase):
 		self.assertIn("Scanned 2 symbol(s). Triggered: CAT.", summary_text)
 		self.assertIn("Decisions: 1 buy, 0 sell, 0 skip.", summary_text)
 		self.assertIn("Guardrails passed. Claude calls today: 1. Trades today: 0.", summary_text)
+		self.assertTrue(summary_text.startswith("Trading scan completed."))
 
 
 if __name__ == "__main__":

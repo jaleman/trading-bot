@@ -50,11 +50,11 @@ def format_operator_summary(payload: dict) -> str:
 	trade_count = len(orders)
 	scanned_count = len(indicator_snapshots)
 
-	line_1 = "Staged trading scan completed."
+	line_1 = "Trading scan completed."
 	if safe_mode_active and trade_count == 0:
-		line_1 = "Staged trading scan completed. Safe mode remained active; no trades executed."
+		line_1 = "Trading scan completed. Safe mode remained active; no trades executed."
 	elif trade_count > 0:
-		line_1 = f"Staged trading scan completed. Executed {trade_count} paper-trade order(s)."
+		line_1 = f"Trading scan completed. Executed {trade_count} paper-trade order(s)."
 
 	line_2 = f"Scanned {scanned_count} symbol(s). Triggered: {triggered_text}. Watching: {watching_text}."
 	line_3 = f"Decisions: {buys} buy, {sells} sell, {skips} skip."

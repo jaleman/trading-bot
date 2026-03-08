@@ -184,7 +184,7 @@ class DailyScanGuardrailTests(unittest.TestCase):
         self.assertEqual(summary.strategy_file, str(self.strategy_config))
         self.assertEqual(summary.status, "production-candidate-safe-mode")
         self.assertEqual(loaded_api_key, "demo-key")
-        self.assertTrue(any("Loaded staged env file:" in note for note in summary.notes))
+        self.assertTrue(any("Loaded runtime env file:" in note for note in summary.notes))
 
 
 if __name__ == "__main__":

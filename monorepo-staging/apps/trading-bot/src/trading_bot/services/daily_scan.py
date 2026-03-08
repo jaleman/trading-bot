@@ -73,25 +73,24 @@ def run_daily_scan(
         else write_logs
     )
     notes = [
-        "Monorepo trading-bot production-candidate runtime.",
-        "Production cutover has not occurred; this runtime remains staged.",
+        "Monorepo trading-bot runtime.",
         f"Using strategy config: {paths.strategy_config}",
         f"Configured watchlist size: {len(strategy.watchlist)}",
         f"Configured monitoring model: {strategy.models.monitoring}",
     ]
     if strategy.execution_controls.safe_mode:
         notes.append(
-            "Safe mode is enabled in the staged runtime; no trades will execute unless execution policy is explicitly changed."
+            "Safe mode is enabled; no trades will execute unless execution policy is explicitly changed."
         )
     else:
         notes.append(
-            "Safe mode is disabled in config; execution remains subject to explicit invocation and guardrails."
+            "Safe mode is disabled in config; paper-trade execution remains subject to explicit invocation and guardrails."
         )
 
     if loaded_env_file is not None:
-        notes.append(f"Loaded staged env file: {loaded_env_file}")
+        notes.append(f"Loaded runtime env file: {loaded_env_file}")
     else:
-        notes.append("No staged env file loaded; relying on existing environment variables.")
+        notes.append("No runtime env file loaded; relying on existing environment variables.")
 
     guardrails = []
     account = None
