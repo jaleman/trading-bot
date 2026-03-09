@@ -54,6 +54,30 @@ class OperatorSummaryTests(unittest.TestCase):
 		self.assertIn("Guardrails passed. Claude calls today: 1. Trades today: 0.", summary_text)
 		self.assertTrue(summary_text.startswith("Trading scan completed."))
 
+	def test_format_operator_summary_does_not_report_safe_mode_when_disabled(self) -> None:
+		payload = {
+			"timestamp": "2026-03-08T19:42:28",
+			"summary": {
+				"status": "production-candidate",
+				"notes": [
+					"Safe mode is disabled in config; paper-trade execution remains subject to explicit invocation and guardrails.",
+				],
+				"indicator_snapshots": [{"symbol": "CAT"}],
+				"triggered": ["CAT"],
+				"watching": [],
+				"decisions": [{"symbol": "CAT", "action": "buy"}],
+				"order_results": [],
+				"guardrails": [{"name": "daily_claude_call_limit", "allowed": True}],
+				"guardrail_state": {"claude_calls_today": 4, "trades_today": 0},
+			},
+		}
+
+		summary_text = format_operator_summary(payload)
+
+		self.assertTrue(summary_text.startswith("Trading scan completed."))
+		self.assertNotIn("Safe mode remained active", summary_text)
+		self.assertIn("Decisions: 1 buy, 0 sell, 0 skip.", summary_text)
+
 
 if __name__ == "__main__":
 	unittest.main()

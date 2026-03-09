@@ -40,9 +40,10 @@ def format_operator_summary(payload: dict) -> str:
 	skips = sum(1 for item in decisions if item.get("action") == "skip")
 	blocked_guardrails = [item.get("name", "unknown") for item in guardrails if not item.get("allowed", False)]
 	status = summary.get("status", "")
+	normalized_notes = [note.lower() for note in notes]
 	safe_mode_active = "safe-mode" in status or any(
-		"safe mode" in note.lower() or "live actions remain disabled" in note.lower()
-		for note in notes
+		"safe mode is enabled" in note or "live actions remain disabled" in note
+		for note in normalized_notes
 	)
 
 	triggered_text = ", ".join(triggered) if triggered else "none"
