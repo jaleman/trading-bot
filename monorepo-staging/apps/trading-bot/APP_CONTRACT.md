@@ -17,8 +17,9 @@ The trading-bot app owns:
 - resolving runtime paths
 - fetching market data
 - calculating indicators
-- prefiltering candidate signals
+- deterministically screening and scoring candidate signals
 - preparing trade decisions
+- routing shortlisted candidates through local analysis and optional escalation review
 - interacting with the broker layer
 - recording structured run outcomes
 
@@ -36,9 +37,10 @@ OpenClaw owns:
 
 The rebuilt app must preserve these behaviors from the live hybrid system:
 
-1. **Signal gate before paid reasoning**
-   - local prefilter first
-   - paid model only when symbols are triggered
+1. **Deterministic gate before premium reasoning**
+   - deterministic screening first
+   - local analysis on shortlisted candidates
+   - premium model only when escalation is warranted
 
 2. **Paper-trading broker flow**
    - account lookup
@@ -101,18 +103,22 @@ Reserved for external-system adapters such as Alpaca, data providers, local mode
 - Contract established
 - Package created and promoted to a staged production-candidate runtime
 - Market-data and indicator adapter ported
-- Ollama prefilter adapter ported
-- Claude decision adapter ported
+- deterministic strategy engine added
+- Ollama local analysis adapter added
+- Claude escalation review adapter ported
 - Broker adapter ported
 - Runtime logging helper ported
-- Daily scan service can now load config, resolve runtime paths, and optionally fetch indicator snapshots, run the prefilter gate, request structured decisions, fetch broker context, and execute staged paper trades
-- Initial guardrail enforcement added for Claude call limits, trade counts, position counts, and execution policy
-- Initial unittest coverage added for core guardrail behavior
+- Daily scan service can now load config, resolve runtime paths, fetch indicator snapshots, evaluate deterministic entry/exit candidates, run local analysis, optionally escalate to Claude, fetch broker context, and execute staged paper trades
+- Guardrail enforcement now covers Claude call limits, trade counts, position counts, execution policy, and final execution-intent validation
+- Initial unittest coverage now covers deterministic strategy behavior, local analysis routing, and execution-firewall behavior
 - Persistence design beyond runtime logs and daily guardrail counters is still pending
 
 ## Current Runtime Position
 
-The staged app should now be treated as a **production-candidate runtime contract** for cutover planning.
+The app should now be treated as the active managed runtime in the live scheduled OpenClaw path.
 
-That does **not** mean live production cutover has happened.
-It means the staged runtime now reports itself as a production candidate while still preserving explicit safe-mode and staged-runtime boundaries.
+The March 8, 2026 cutover moved the scheduled job onto the monorepo wrapper flow.
+The March 9, 2026 runtime then exercised paper-trade execution successfully under the execution-policy and guardrail checks.
+
+That still does **not** authorize live-capital trading.
+The current runtime position is post-cutover, paper-trade validation under explicit guardrails.

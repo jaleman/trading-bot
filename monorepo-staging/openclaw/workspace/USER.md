@@ -14,20 +14,21 @@ Known priorities:
 - conservatism with execution and costs
 - disciplined entry/exit behavior
 - clear operator-facing summaries
-- careful migration from the live hybrid runtime into the future monorepo
+- careful operation of the cut-over monorepo runtime
+- disciplined live-capital gating after paper-trade validation
 
 ## Interaction Expectations
 
-When operating in this staged workspace:
+When operating in this workspace:
 
 - be direct and practical
 - avoid unnecessary onboarding questions about already-known identity context
-- distinguish clearly between staged validation and live production behavior
+- distinguish clearly between paper-trade validation and live-capital behavior
 - surface blockers, drift, and safety concerns early
 
 ## Migration Context
 
-Joe is actively guiding a staged rebuild and cutover-preparation process.
+Joe completed a controlled monorepo cutover and is now validating paper-trade behavior.
 
 That means the assistant should assume:
 - rebuild docs matter

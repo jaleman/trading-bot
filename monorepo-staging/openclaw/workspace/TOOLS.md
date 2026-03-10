@@ -2,18 +2,18 @@
 
 ## Monorepo Trading Platform
 
-This workspace is for the future staged monorepo version of the trading platform.
+This workspace drives the active monorepo-managed trading runtime.
 
 ## Important Status
 
-- The staged monorepo is **not** the live production runtime yet.
-- The staged monorepo is **not ready for cutover** yet.
-- The current live system still runs from `~/trading-bot`.
-- Use the staged monorepo commands only when explicitly working on or validating the rebuild.
+- The active managed runtime lives at `~/trading-bot/monorepo-staging`.
+- The scheduled OpenClaw job and Telegram workflow now target the monorepo wrapper scripts.
+- The current phase is post-cutover paper-trade validation.
+- Live-capital trading remains a separate approval gate and is not implied by paper-trade activity.
 
-## Trading Bot App (Staged)
+## Trading Bot App
 
-The staged trading app lives at:
+The trading app lives at:
 
 ```bash
 ~/trading-bot/monorepo-staging/apps/trading-bot
@@ -23,16 +23,32 @@ The staged trading app lives at:
 
 | What | Command |
 |------|---------|
-| Print staged operator summary | `~/trading-bot/monorepo-staging/scripts/print_trading_bot_operator_summary.sh` |
-| Run supervised staged rehearsal | `~/trading-bot/monorepo-staging/scripts/run_trading_bot_rehearsal.sh` |
-| Run staged CLI runtime | `~/trading-bot/monorepo-staging/scripts/run_trading_bot.sh` |
-| Run staged tests | `~/trading-bot/monorepo-staging/scripts/run_trading_bot_tests.sh` |
-| View staged runtime log | `tail -30 ~/trading-bot/monorepo-staging/runtime/trading-bot/logs/trades.log` |
-| View staged guardrail state | `cat ~/trading-bot/monorepo-staging/runtime/trading-bot/guardrail-state.json` |
+| Print operator summary | `~/trading-bot/monorepo-staging/scripts/print_trading_bot_operator_summary.sh` |
+| Run supervised trading scan | `~/trading-bot/monorepo-staging/scripts/run_trading_bot_rehearsal.sh` |
+| Run CLI runtime | `~/trading-bot/monorepo-staging/scripts/run_trading_bot.sh` |
+| Run tests | `~/trading-bot/monorepo-staging/scripts/run_trading_bot_tests.sh` |
+| View runtime log | `tail -30 ~/trading-bot/monorepo-staging/runtime/trading-bot/logs/trades.log` |
+| View guardrail state | `cat ~/trading-bot/monorepo-staging/runtime/trading-bot/guardrail-state.json` |
 
-Wrapper scripts are preferred because they normalize the staged app's `src/` layout and future run conventions.
+Wrapper scripts are preferred because they normalize the app's `src/` layout and deployed run conventions.
 
-When an operator-facing summary is needed, prefer the summary wrapper over improvising from raw logs.
+## Operator Summary Rule
+
+- When an operator asks for the latest summary, run `~/trading-bot/monorepo-staging/scripts/print_trading_bot_operator_summary.sh` every time.
+- Reply with the command's stdout only.
+- Do not add headings, markdown bullets, explanations, or restated counts before or after the stdout.
+- Do not answer latest-summary requests from memory, prior messages, or older run artifacts.
+- If the user asks whether submitted buys are pending, accepted, or filled, check broker state before answering.
+
+Example latest-summary reply shape:
+
+Trading scan completed. Executed 2 paper-trade order(s).
+Scanned 50 symbol(s). Triggered: BRK.B, COST. Watching: AVGO.
+Decisions: 2 buy, 0 sell, 0 skip.
+Local analysis: COST presents a clear buy opportunity with a strong setup, while BRK.B also merits consideration. AVGO, though interesting, requires further confirmation and is best watched for now. Top ranked: COST (buy, confidence 0.90).
+Guardrails passed. Claude calls today: 0. Trades today: 2.
+
+This example is plain text, not markdown. Preserve line breaks and do not prepend commentary.
 
 ## Current Rebuild References
 
@@ -49,9 +65,9 @@ Use these docs before making structural changes:
 - scheduling
 - Telegram interaction
 - workspace behavior files
-- operator-facing summaries
+- delivery of operator summaries
 
-### Staged trading app owns
+### Trading app owns
 - config loading
 - market-data adapter
 - prefilter adapter
@@ -59,10 +75,10 @@ Use these docs before making structural changes:
 - broker adapter
 - runtime logging
 - guardrail logic
+- operator summary generation
 
 ## Safety Rules
 
-- Do not point production cron at the staged app yet.
-- Do not enable staged paper-trade execution without explicit migration approval.
-- Treat the staged app as a rebuild/testing target until cutover is formally planned.
-- Passing wrapper-script or test validation does not authorize production migration.
+- Keep paper-trade validation distinct from live-capital readiness.
+- Do not claim orders were filled when the broker only reports `ACCEPTED`.
+- Use runtime artifacts and broker state as the source of truth when operator-facing status is questioned.

@@ -1,27 +1,42 @@
 # HEARTBEAT.md
 
-## Staged Monorepo Checks
+## Active Runtime Checks
 
-Use this heartbeat only for rebuild validation work, not for the current live production trading bot.
+Use this heartbeat for the active monorepo trading runtime.
 
-Do not interpret successful staged checks as cutover approval.
+Do not interpret successful paper-trade checks as live-capital approval.
 
-### 1. Check staged runtime activity
+### 1. Check runtime activity
 ```bash
 ~/trading-bot/monorepo-staging/scripts/print_trading_bot_operator_summary.sh
 ```
-- If the staged app has not been run, stay quiet.
-- If the staged app reports an error, notify the user.
-- If the staged app remains in staged safe mode, do not imply that live trades occurred.
+- If the app has not been run, stay quiet.
+- If the app reports an error, notify the user.
+- If the summary wrapper returns output, use that exact stdout for any operator-facing summary.
+- Do not wrap the stdout in headings, bullet lists, or extra explanation.
 
 ### 1a. Optional raw log inspection
 ```bash
 tail -30 ~/trading-bot/monorepo-staging/runtime/trading-bot/logs/trades.log
 ```
 
-### 2. Check staged guardrail state
+### 1b. Optional broker-state check when order status matters
 ```bash
-cat ~/trading-bot/monorepo-staging/runtime/trading-bot/guardrail-state.json 2>/dev/null || echo "No staged guardrail state yet"
+cd ~/trading-bot/monorepo-staging/apps/trading-bot && PYTHONPATH=src ./.venv/bin/python - <<'PY'
+from trading_bot.env_loader import load_runtime_env
+from trading_bot.integrations.broker import AlpacaBrokerClient
+
+load_runtime_env()
+client = AlpacaBrokerClient()
+print(client.get_trade_history(limit=10))
+PY
+```
+
+Use this only when the operator asks whether submitted buys are pending, accepted, or filled.
+
+### 2. Check guardrail state
+```bash
+cat ~/trading-bot/monorepo-staging/runtime/trading-bot/guardrail-state.json 2>/dev/null || echo "No guardrail state yet"
 ```
 
 ### 3. Optional validation check
@@ -32,12 +47,13 @@ cat ~/trading-bot/monorepo-staging/runtime/trading-bot/guardrail-state.json 2>/d
 ## When to Notify
 
 **Notify when:**
-- staged tests fail
-- staged runtime logs show errors
-- staged runtime unexpectedly attempts execution outside expected safe-mode behavior
-- staged operator summary reports blocked guardrails or unexpected execution
+- tests fail
+- runtime logs show errors
+- guardrails block execution
+- the runtime submits paper-trade orders
+- broker state contradicts the latest summary artifact
 
 **Stay quiet when:**
-- the staged app has not been run
-- there is no new staged activity
-- the staged app remains in expected production-candidate safe-mode behavior
+- the app has not been run
+- there is no new runtime activity
+- there is no operator-facing change worth reporting

@@ -10,7 +10,20 @@ It is now the active managed runtime path for the live trading-bot OpenClaw job,
 - controlled cutover completed on March 8, 2026
 - live trading job enabled on March 8, 2026
 - OpenClaw now runs the trading bot through the wrapper flow in this directory
+- paper-trade execution was exercised successfully on March 9, 2026 with guardrails passing
+- the current live phase is post-cutover validation under the monorepo-managed runtime
 - the legacy root repo remains available as historical reference and fallback context
+
+## Current Phase
+
+This repo is no longer just a staging scaffold in practice.
+
+The active process state is:
+
+1. cutover complete
+2. live scheduled wrapper path active
+3. paper-trade validation underway
+4. live-capital approval still pending a separate gate
 
 ## Current Intent
 
@@ -38,6 +51,9 @@ The current live scheduled path is:
 - summary wrapper: [scripts/print_trading_bot_operator_summary.sh](scripts/print_trading_bot_operator_summary.sh)
 - deployed OpenClaw workspace files under `~/.openclaw/workspace/`
 
+Despite the wrapper name, this path is now the live scheduled job contract.
+The latest runtime artifacts show that paper-trade execution has already been exercised successfully through this managed path.
+
 The legacy root repo still contains the original implementation sources:
 
 - `~/trading-bot/main.py`
@@ -50,6 +66,8 @@ Those files remain useful reference material, but they are no longer the intende
 ## Important Safety Rule
 
 Operational changes should continue to use the wrapper-script contract, guardrail-aware runtime flow, and documented OpenClaw assets rather than ad hoc deep-path commands.
+
+Live-capital trading remains out of scope until a separate explicit approval gate is defined.
 
 ## Repository Layout
 

@@ -2,30 +2,29 @@
 
 ## Purpose
 
-This file explains how OpenClaw should think about the transition from the current live trading bot to the future monorepo-native trading platform.
+This file explains how OpenClaw should think about the completed transition into the monorepo-native trading platform and the remaining approval gates.
 
 ## Current State
 
-### Live production path
-- `~/trading-bot`
-
-### Staged rebuild path
+### Active runtime path
 - `~/trading-bot/monorepo-staging`
+
+### Legacy root path
+- `~/trading-bot`
 
 ## Rule
 
-Do not confuse the two.
+Do not confuse the active monorepo runtime with legacy root materials.
 
-### Live system
-The current OpenClaw cron and Telegram-facing workflow still target the live repo.
+### Active system
+The current OpenClaw cron and Telegram-facing workflow target the monorepo wrapper scripts.
 
-### Staged system
-The staged monorepo exists for rebuild work, validation, and future cutover preparation.
+### Current phase
+Cutover completed on March 8, 2026. Paper-trade execution was exercised on March 9, 2026. Live-capital trading remains a separate gate.
 
 ## Cutover Principle
 
-OpenClaw should only be switched to the staged/monorepo-native commands after:
-- rebuild docs are complete
-- staged app behavior is validated
-- safety controls are validated
-- migration commands and rollback steps are documented
+OpenClaw should treat cutover as complete, but should still keep the remaining gate explicit:
+- paper-trade results are monitored through runtime artifacts and broker state
+- operator summaries come from the monorepo summary wrapper
+- live-capital authorization requires a separate explicit approval

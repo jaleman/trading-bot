@@ -244,7 +244,19 @@ A successful cutover means:
 
 ## Current Status
 
-- Cutover not ready
-- This document is planning-only for now
-- Production OpenClaw should continue targeting the current live repo
-- Recent script and test validation reduced setup risk, but did not authorize go-live
+- Controlled cutover completed on March 8, 2026
+- Production OpenClaw now targets the monorepo wrapper flow rather than the legacy root repo
+- The live scheduled job is enabled and running through the monorepo-managed OpenClaw assets
+- Paper-trade execution was exercised successfully on March 9, 2026 under guardrail enforcement
+- This document is now partly historical: the migration plan succeeded, but live-capital trading remains a separate post-cutover gate
+
+## Current Phase
+
+The active phase is now:
+
+1. post-cutover validation
+2. paper-trade monitoring
+3. deciding the explicit gate for any future live-capital promotion
+
+The next meaningful process decision is no longer whether to cut over OpenClaw.
+The next decision is whether the paper-trading results, guardrail behavior, and operator workflow are strong enough to justify defining a live-capital approval gate.

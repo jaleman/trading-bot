@@ -1,5 +1,5 @@
 # Trading Bot Implementation Plan
-*Updated March 2026 — Reflects current architecture, strategy, and cost optimizations*
+*Updated March 9, 2026 — Reflects the live monorepo runtime, post-cutover status, and current paper-trading phase*
 
 ---
 
@@ -8,6 +8,21 @@
 The bot runs on a dedicated **Mac Mini M4 (16GB RAM)** as an always-on local machine. There is no VPS phase — the Mac Mini replaces that need entirely, running 24/7 at no additional infrastructure cost.
 
 **OpenClaw** is the agent platform, running natively on the Mac Mini. It handles agent orchestration, Telegram integration, and Claude API connectivity out of the box, eliminating the need to build custom agent infrastructure from scratch.
+
+## Current Repository Reality
+
+The repository has moved beyond the original single-root implementation plan.
+
+- the active scheduled runtime now lives under `monorepo-staging/`
+- OpenClaw is the outer runtime and Telegram/operator interface
+- the Python trading engine now runs through wrapper scripts rather than direct `main.py` execution
+- the legacy root-level implementation remains available as historical reference and fallback context, but it is no longer the intended scheduled path
+
+The current managed live path is:
+
+1. OpenClaw cron job `trading-bot-daily-scan`
+2. wrapper execution via `monorepo-staging/scripts/run_trading_bot_rehearsal.sh`
+3. operator summary delivery via `monorepo-staging/scripts/print_trading_bot_operator_summary.sh`
 
 ---
 
@@ -149,25 +164,36 @@ The most impactful optimization is already baked into the architecture — Ollam
 
 ```
 trading-bot/
-├── main.py                    # Entry point
-├── agents/
-│   └── trader_agent.py        # Claude-powered daily decision agent
-├── monitoring/
-│   └── ollama_monitor.py      # Local Ollama continuous watchlist monitor
-├── tools/
-│   ├── alpaca_tools.py        # Stock trading functions
-│   └── data_tools.py          # Market data fetching + indicator calc
+├── docs/
+│   └── TradingBotPlan.md
 ├── config/
-│   ├── .env                   # API keys (never commit!)
-│   └── strategy.json          # Trading rules, model config, API limits
-├── logs/
-│   └── trades.log             # Every trade with reasoning
-├── database/
-│   └── trades.db              # SQLite trade history
-└── requirements.txt
+│   └── strategy.json                  # legacy root config reference
+├── logs/                              # legacy root logs
+├── database/                          # legacy root database area
+└── monorepo-staging/
+  ├── README.md                      # active managed runtime overview
+  ├── apps/
+  │   └── trading-bot/
+  │       ├── pyproject.toml
+  │       ├── .env.example
+  │       ├── config/
+  │       │   ├── strategy.example.json
+  │       │   └── strategy.local.json    # local-only runtime config
+  │       ├── src/trading_bot/
+  │       └── tests/
+  ├── openclaw/                     # deployed OpenClaw-facing assets and cutover docs
+  ├── runtime/                      # runtime state, deployment snapshots, logs, guardrails
+  └── scripts/                      # canonical wrapper, summary, bootstrap, and test scripts
 ```
 
-### strategy.json Structure (Suggested)
+### Runtime Config Structure (Current Direction)
+
+The live managed runtime now prefers the monorepo app-local config path:
+
+- `monorepo-staging/apps/trading-bot/config/strategy.local.json` for local runtime config
+- `monorepo-staging/apps/trading-bot/.env` for local secrets
+
+The tracked example config remains the template for local operator files.
 
 ```json
 {
@@ -217,7 +243,7 @@ trading-bot/
 
 ## Current Status & Next Steps
 
-*Last updated: March 3, 2026 — Full pipeline live, paper trading active*
+*Last updated: March 9, 2026 — Monorepo cutover complete, paper-trade validation active*
 
 **Completed:**
 - Mac Mini M4 purchased and designated as trading machine
@@ -229,29 +255,36 @@ trading-bot/
 - OpenClaw 2026.3.1 installed, configured with Anthropic API key, running as background service (launchd, PID persistent across reboots)
 - Ollama installed, `qwen2.5:7b` model running as background service
 - Telegram bot (`@labanlarotrading_bot`) connected and responsive
-- Full `trading-bot/` project structure built at `~/trading-bot/`
-- All Python scripts built and tested: `alpaca_tools.py`, `data_tools.py`, `ollama_monitor.py`, `trader_agent.py`, `main.py`
-- Full pipeline tested end-to-end — Ollama pre-filters 12 stocks, Claude only called on confirmed triggers
-- OpenClaw integrated via workspace markdown files (`TOOLS.md`, `HEARTBEAT.md`)
-- OpenClaw cron job configured — daily scan fires at 9:35am weekdays automatically
-- Bot responds to natural language commands via Telegram (scan, portfolio, signals, trade history)
-- First live scan completed March 3, 2026 — JPM and BRK.B flagged as watching, no triggers, $0 Claude API cost
+- monorepo trading app created under `monorepo-staging/apps/trading-bot/`
+- wrapper-script based runtime contract established under `monorepo-staging/scripts/`
+- OpenClaw runtime assets, cutover checklist, runbook, and final review recorded under `monorepo-staging/openclaw/`
+- controlled cutover to the monorepo runtime completed on March 8, 2026
+- live OpenClaw trading job enabled on March 8, 2026 after verification and backup
+- live OpenClaw default operator-chat model switched to `ollama/qwen2.5:7b`
+- deterministic strategy engine, local analysis, optional Claude escalation, broker adapter, runtime logging, and guardrails are all ported into the monorepo app
+- paper-trade execution was exercised successfully on March 9, 2026 with guardrails passing
+- latest managed-runtime paper trades executed for `BRK.B` and `COST` with accepted paper orders
 
-**Paper Trading Active — 90-Day Clock Started: March 3, 2026**
+**Current Phase: Post-Cutover Validation And Paper Trading**
 
-Target end date: **June 1, 2026**
+The repo is no longer in pre-cutover staging.
+It is now in the managed-runtime validation phase:
 
-| Metric | Target | Current |
-|--------|--------|---------|
-| Return | ≥ 3.75% | 0% (day 1) |
-| Consecutive losses | ≤ 2 | 0 |
-| Trades executed | — | 0 |
+| Area | Current State |
+|------|---------------|
+| OpenClaw runtime | live and cut over to monorepo assets |
+| Scheduled job | enabled and wrapper-based |
+| Operator summaries | generated from structured runtime artifacts |
+| Guardrails | enforced for execution policy, sizing, trade counts, and final intent validation |
+| Paper trading | active under the monorepo runtime |
+| Live-capital trading | not approved |
 
 **Still To Do:**
-1. Monitor daily scan results via Telegram for 90 days
-2. Evaluate live trading readiness at the 90-day mark (June 1, 2026)
-3. Deploy $1,000 live capital only if both paper trading thresholds are met
+1. Monitor paper-trade performance and operator workflow under the live monorepo path
+2. Decide the explicit approval gate for any live-capital promotion
+3. Improve persistence and reporting beyond the current runtime logs and daily guardrail counters
+4. Deploy live capital only after a separate go/no-go decision beyond paper-trade success
 
 ---
 
-*Paper trading first. Live capital ($1,000) only after thresholds are met.*
+*The migration goal is complete. The current gate is no longer cutover readiness; it is whether guarded paper-trading results justify a future live-capital approval.*

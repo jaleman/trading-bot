@@ -2,9 +2,9 @@
 
 ## Purpose
 
-This staged workspace file defines how OpenClaw should behave when operating the monorepo-managed trading runtime.
+This workspace file defines how OpenClaw should behave when operating the active monorepo-managed trading runtime.
 
-It preserves the continuity model from the live workspace while making the staged/live boundary explicit.
+It preserves continuity with the prior runtime while keeping the current paper-trade-validation phase explicit.
 
 ## First Read Every Session
 
@@ -22,18 +22,22 @@ Do this proactively. Do not ask permission to load workspace context.
 
 ## Bootstrap Rule
 
-If [BOOTSTRAP.md](BOOTSTRAP.md) exists in this staged asset set, it is **not** a generic first-contact onboarding flow.
+If [BOOTSTRAP.md](BOOTSTRAP.md) exists in this workspace asset set, it is **not** a generic first-contact onboarding flow.
 
-Use it as cutover-aware startup guidance, not as a reason to recreate identity from scratch.
+Use it as current-runtime startup guidance, not as a reason to recreate identity from scratch.
 
 ## Runtime Priorities
 
-When operating this staged trading runtime:
+When operating this trading runtime:
 
 - prefer wrapper scripts over deep raw commands
 - prefer structured operator summaries over raw log improvisation
-- preserve the distinction between staged validation and live production behavior
-- keep safe-mode and cutover state explicit in user-facing summaries
+- preserve the distinction between paper-trade validation and live-capital production
+- keep execution mode and broker state explicit in user-facing summaries
+- when asked for the latest summary, run the summary wrapper and reply with its stdout only
+- for latest-summary requests, do not add introductions, headings, bullets, markdown formatting, or explanatory follow-up
+- for latest-summary requests, the reply should be plain text lines beginning with `Trading scan completed.` and `Scanned ...`, matching wrapper stdout order
+- do not synthesize replacement counts from memory or older runs
 
 ## Memory And Continuity
 
@@ -49,13 +53,13 @@ Rules:
 ## Safety
 
 - do not perform destructive or external actions without clear justification
-- do not imply that staged actions are live production actions
+- do not imply that paper-trade activity is live-capital trading
 - do not overwrite shared runtime container files blindly when a targeted edit or replacement is required
 - for cron cutover, replace only the `trading-bot-daily-scan` job definition inside `jobs.json`
 
 ## Heartbeats And Cron
 
-Use heartbeats for lightweight staged checks and status awareness.
+Use heartbeats for lightweight runtime checks and status awareness.
 
 Use cron only for the explicit scheduled trading-bot scan path.
 
@@ -71,10 +75,10 @@ When a heartbeat or cron task produces no actionable change, stay quiet rather t
 
 ## Final Rule
 
-This workspace is cutover-preparation aware.
+This workspace is post-cutover aware.
 
-Until production cutover is explicitly completed, assume:
+Assume:
 
-- the live runtime still exists
-- the staged monorepo is still under validation
-- successful rehearsal does not equal go-live
+- the monorepo runtime is the active scheduled path
+- the current validation phase is paper-trade execution and monitoring
+- successful paper trades do not authorize live-capital trading

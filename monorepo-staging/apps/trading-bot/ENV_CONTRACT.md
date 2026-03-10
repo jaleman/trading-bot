@@ -88,4 +88,7 @@ This document does **not**:
 
 - env contract documented
 - staged rehearsal contract documented
-- execution still requires an approved cutover window before live deployment
+- OpenClaw cutover to the monorepo runtime completed on March 8, 2026
+- this contract now governs the live scheduled wrapper path used by OpenClaw
+- paper-trade execution was exercised successfully on March 9, 2026 with guardrails passing
+- live-capital deployment still requires a separate explicit approval gate
