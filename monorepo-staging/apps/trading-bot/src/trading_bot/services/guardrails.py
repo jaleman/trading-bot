@@ -108,3 +108,74 @@ def evaluate_position_size(
             "portfolio_value": account.portfolio_value if account is not None else 0,
         },
     )
+
+
+def validate_execution_intents(
+    strategy: StrategyConfig,
+    decisions: list[TradeDecision],
+    positions: list[PositionSnapshot],
+    account: AccountSnapshot | None,
+) -> tuple[list[TradeDecision], GuardrailStatus]:
+    positions_by_symbol = {position.symbol: position for position in positions}
+    seen_executable_symbols: set[str] = set()
+    allowed: list[TradeDecision] = []
+    blocked_reasons: list[str] = []
+
+    for decision in decisions:
+        if decision.action not in {"buy", "sell"}:
+            allowed.append(decision)
+            continue
+
+        if decision.symbol in seen_executable_symbols:
+            blocked_reasons.append(
+                f"Blocked duplicate executable action for {decision.symbol}."
+            )
+            continue
+
+        if decision.action == "buy":
+            if decision.symbol in positions_by_symbol and not strategy.risk.allow_pyramiding:
+                blocked_reasons.append(
+                    f"Blocked buy for {decision.symbol} because the position already exists and pyramiding is disabled."
+                )
+                continue
+            if account is None or account.buying_power <= 0:
+                blocked_reasons.append(
+                    f"Blocked buy for {decision.symbol} because buying power is unavailable or zero."
+                )
+                continue
+
+        if decision.action == "sell":
+            position = positions_by_symbol.get(decision.symbol)
+            if position is None:
+                blocked_reasons.append(
+                    f"Blocked sell for {decision.symbol} because no open position exists."
+                )
+                continue
+
+            requested_qty = int(decision.qty or position.qty)
+            if requested_qty <= 0:
+                blocked_reasons.append(
+                    f"Blocked sell for {decision.symbol} because the requested quantity is invalid."
+                )
+                continue
+            if requested_qty > int(position.qty):
+                blocked_reasons.append(
+                    f"Blocked sell for {decision.symbol} because the requested quantity exceeds the open position size."
+                )
+                continue
+
+        seen_executable_symbols.add(decision.symbol)
+        allowed.append(decision)
+
+    status = GuardrailStatus(
+        name="execution_intent_firewall",
+        allowed=not blocked_reasons,
+        reasons=blocked_reasons,
+        details={
+            "input_decisions": len(decisions),
+            "allowed_decisions": len(allowed),
+            "blocked_decisions": len(blocked_reasons),
+        },
+    )
+
+    return allowed, status

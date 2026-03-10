@@ -4,26 +4,50 @@ from trading_bot.config_loader import load_strategy_config
 from trading_bot.env_loader import load_runtime_env
 from trading_bot.integrations.broker import AlpacaBrokerClient, BrokerError
 from trading_bot.integrations.decision_model import ClaudeDecisionClient, DecisionModelError
+from trading_bot.integrations.local_analysis import (
+    LocalAnalysisError,
+    OllamaLocalAnalysisClient,
+)
 from trading_bot.integrations.market_data import AlpacaMarketDataClient, MarketDataError
-from trading_bot.integrations.prefilter import OllamaPrefilterClient, PrefilterError
 from trading_bot.models import DailyScanSummary
 from trading_bot.persistence.guardrail_state import GuardrailStateStore
 from trading_bot.persistence.trade_log import TradeLogger
 from trading_bot.runtime_paths import ensure_runtime_dirs, resolve_paths
-from trading_bot.services.decision_context import (
-    build_stub_account,
-    build_stub_positions,
-    filter_triggered_snapshots,
-    summarize_decisions,
-)
+from trading_bot.services.decision_context import summarize_decisions
 from trading_bot.services.guardrails import (
     evaluate_claude_call_limit,
     evaluate_execution_policy,
     evaluate_position_size,
     evaluate_trade_limits,
+    validate_execution_intents,
 )
+from trading_bot.services.model_router import should_escalate_to_claude
 from trading_bot.services.safety import append_guardrail_note, summarize_guardrails
+from trading_bot.services.strategy_engine import evaluate_strategy
 from trading_bot.services.trade_execution import build_order_results
+from trading_bot.services.universe import UniverseError, resolve_scan_universe
+
+
+def _build_local_analysis_candidates(strategy, strategy_evaluation):
+    candidates = [
+        item
+        for item in strategy_evaluation.candidates
+        if item.action in {"buy", "sell", "watch", "hold"}
+    ]
+    candidates.sort(key=lambda item: item.score, reverse=True)
+    return candidates[: strategy.model_routing.max_candidates_for_local_analysis]
+
+
+def _filter_candidate_snapshots(indicator_snapshots, candidates):
+    candidate_symbols = {item.symbol for item in candidates}
+    return [item for item in indicator_snapshots if item.symbol in candidate_symbols]
+
+
+def _has_actionable_candidates(strategy_evaluation) -> bool:
+    return bool(
+        strategy_evaluation.entry_decisions
+        or strategy_evaluation.exit_decisions
+    )
 
 
 def determine_runtime_status(
@@ -67,17 +91,31 @@ def run_daily_scan(
     logger = TradeLogger(paths.trade_log)
     guardrail_store = GuardrailStateStore(paths.guardrail_state)
     guardrail_state = guardrail_store.load()
+    scan_symbols = []
     effective_write_logs = (
         strategy.execution_controls.write_logs_by_default
         if write_logs is None
         else write_logs
     )
-    notes = [
-        "Monorepo trading-bot runtime.",
-        f"Using strategy config: {paths.strategy_config}",
-        f"Configured watchlist size: {len(strategy.watchlist)}",
-        f"Configured monitoring model: {strategy.models.monitoring}",
-    ]
+
+    try:
+        scan_symbols = resolve_scan_universe(strategy)
+    except UniverseError as exc:
+        scan_symbols = list(strategy.watchlist)
+        notes = [
+            "Monorepo trading-bot runtime.",
+            f"Using strategy config: {paths.strategy_config}",
+            f"Universe resolution failed: {exc}",
+            f"Falling back to compatibility watchlist size: {len(scan_symbols)}",
+            f"Configured local analysis model: {strategy.models.monitoring}",
+        ]
+    else:
+        notes = [
+            "Monorepo trading-bot runtime.",
+            f"Using strategy config: {paths.strategy_config}",
+            f"Configured universe size: {len(scan_symbols)}",
+            f"Configured local analysis model: {strategy.models.monitoring}",
+        ]
     if strategy.execution_controls.safe_mode:
         notes.append(
             "Safe mode is enabled; no trades will execute unless execution policy is explicitly changed."
@@ -97,6 +135,8 @@ def run_daily_scan(
     positions = []
     indicator_snapshots = []
     prefilter_result = None
+    strategy_evaluation = None
+    local_analysis = None
     decisions = []
     order_results = []
 
@@ -115,10 +155,10 @@ def run_daily_scan(
     else:
         notes.append("Broker adapter is implemented but not invoked by default.")
 
-    if include_market_data or include_prefilter:
+    if include_market_data or include_prefilter or include_decisions or execute_paper_trades:
         try:
             client = AlpacaMarketDataClient()
-            indicator_snapshots = client.get_all_indicators(strategy.watchlist)
+            indicator_snapshots = client.get_all_indicators(scan_symbols)
             notes.append(
                 f"Fetched indicator snapshots for {len(indicator_snapshots)} symbols."
             )
@@ -129,54 +169,108 @@ def run_daily_scan(
     else:
         notes.append("Market data adapter is implemented but not invoked by default.")
 
-    if include_prefilter:
-        if indicator_snapshots:
-            try:
-                prefilter = OllamaPrefilterClient(model=strategy.models.monitoring)
-                prefilter_result = prefilter.classify(indicator_snapshots)
-                notes.append(
-                    f"Prefilter classified {len(prefilter_result.triggered)} triggered and {len(prefilter_result.watching)} watching symbols."
-                )
-            except PrefilterError as exc:
-                notes.append(f"Prefilter disabled: {exc}")
-            except Exception as exc:
-                notes.append(f"Prefilter adapter error: {exc}")
-        else:
-            notes.append("Prefilter skipped because no indicator snapshots were available.")
+    if indicator_snapshots:
+        strategy_evaluation = evaluate_strategy(strategy, indicator_snapshots, positions)
+        prefilter_result = strategy_evaluation.classification
+        notes.append(
+            "Deterministic strategy engine evaluated "
+            f"{len(strategy_evaluation.classification.triggered)} entry and "
+            f"{len(strategy_evaluation.exit_decisions)} exit candidates."
+        )
     else:
-        notes.append("Prefilter adapter is implemented but not invoked by default.")
+        notes.append("Deterministic strategy engine skipped because no indicator snapshots were available.")
+
+    if include_prefilter:
+        if strategy_evaluation is not None:
+            notes.append(
+                f"Deterministic classification returned {len(prefilter_result.triggered)} triggered and {len(prefilter_result.watching)} watching symbols."
+            )
+            if strategy.model_routing.local_analysis_enabled:
+                if not _has_actionable_candidates(strategy_evaluation):
+                    notes.append(
+                        "Local analysis skipped because there were no actionable deterministic candidates."
+                    )
+                else:
+                    shortlist = _build_local_analysis_candidates(strategy, strategy_evaluation)
+                    if shortlist:
+                        try:
+                            analysis_client = OllamaLocalAnalysisClient(model=strategy.models.local_analysis)
+                            local_analysis = analysis_client.analyze(
+                                strategy=strategy,
+                                candidates=shortlist,
+                                snapshots=_filter_candidate_snapshots(indicator_snapshots, shortlist),
+                                account=account,
+                                positions=positions,
+                            )
+                            notes.append(
+                                f"Local analysis ranked {len(local_analysis.ranked_candidates)} candidate(s)."
+                            )
+                            if local_analysis.summary:
+                                notes.append(f"Local analysis summary: {local_analysis.summary}")
+                            if local_analysis.escalate_to_claude:
+                                notes.append(
+                                    "Local analysis recommends Claude escalation"
+                                    f": {local_analysis.escalation_reason or 'no reason provided.'}"
+                                )
+                        except LocalAnalysisError as exc:
+                            notes.append(f"Local analysis disabled: {exc}")
+                        except Exception as exc:
+                            notes.append(f"Local analysis adapter error: {exc}")
+                    else:
+                        notes.append("Local analysis skipped because no shortlist candidates were available.")
+            else:
+                notes.append("Local analysis is disabled by strategy config.")
+        else:
+            notes.append("Signal classification skipped because no deterministic evaluation was available.")
+    else:
+        notes.append("Local analysis is available but not requested for this run.")
 
     if include_decisions:
-        if prefilter_result and prefilter_result.triggered:
-            claude_guardrail = evaluate_claude_call_limit(strategy, guardrail_state)
-            guardrails.append(claude_guardrail)
-            append_guardrail_note(notes, claude_guardrail)
+        if strategy_evaluation is not None:
+            decisions = [
+                *strategy_evaluation.entry_decisions,
+                *strategy_evaluation.exit_decisions,
+            ]
+            notes.append(summarize_decisions(decisions))
+            should_escalate, escalation_reason = should_escalate_to_claude(
+                strategy,
+                local_analysis,
+                positions,
+                decisions,
+            )
+            if should_escalate:
+                claude_guardrail = evaluate_claude_call_limit(strategy, guardrail_state)
+                guardrails.append(claude_guardrail)
+                append_guardrail_note(notes, claude_guardrail)
 
-            if not claude_guardrail.allowed:
-                notes.append("Decision model call skipped due to Claude call guardrail.")
+                if not claude_guardrail.allowed:
+                    notes.append("Claude escalation skipped due to Claude call guardrail.")
+                else:
+                    shortlist = _build_local_analysis_candidates(strategy, strategy_evaluation)
+                    try:
+                        decision_client = ClaudeDecisionClient()
+                        reviewed_decisions = decision_client.review(
+                            strategy=strategy,
+                            candidates=shortlist,
+                            local_analysis=local_analysis,
+                            account=account,
+                            positions=positions,
+                        )
+                        if reviewed_decisions:
+                            decisions = reviewed_decisions
+                            notes.append(f"Claude escalation reviewed candidates: {escalation_reason}")
+                            notes.append(summarize_decisions(decisions))
+                        guardrail_state = guardrail_store.increment_claude_calls(1)
+                    except DecisionModelError as exc:
+                        notes.append(f"Claude escalation disabled: {exc}")
+                    except Exception as exc:
+                        notes.append(f"Claude escalation adapter error: {exc}")
             else:
-                try:
-                    decision_client = ClaudeDecisionClient()
-                    decisions = decision_client.decide(
-                        strategy=strategy,
-                        triggered_symbols=prefilter_result.triggered,
-                        summary=prefilter_result.summary,
-                        stock_data=filter_triggered_snapshots(
-                            indicator_snapshots, prefilter_result.triggered
-                        ),
-                        account=account or build_stub_account(),
-                        positions=positions or build_stub_positions(),
-                    )
-                    guardrail_state = guardrail_store.increment_claude_calls(1)
-                    notes.append(summarize_decisions(decisions))
-                except DecisionModelError as exc:
-                    notes.append(f"Decision model disabled: {exc}")
-                except Exception as exc:
-                    notes.append(f"Decision-model adapter error: {exc}")
+                notes.append(f"Claude escalation skipped: {escalation_reason}")
         else:
-            notes.append("Decision model skipped because no triggered symbols were available.")
+            notes.append("Decision generation skipped because no deterministic evaluation was available.")
     else:
-        notes.append("Decision-model adapter is implemented but not invoked by default.")
+        notes.append("Deterministic decision generation is available but not requested for this run.")
 
     if execute_paper_trades:
         if decisions and account is not None:
@@ -197,17 +291,22 @@ def run_daily_scan(
             guardrails.append(trade_limit_status)
             append_guardrail_note(notes, trade_limit_status)
 
+            filtered_decisions, execution_intent_status = validate_execution_intents(
+                strategy,
+                filtered_decisions,
+                positions,
+                account,
+            )
+            guardrails.append(execution_intent_status)
+            append_guardrail_note(notes, execution_intent_status)
+
             if execution_guardrail.allowed and position_size_guardrail.allowed:
                 try:
                     broker = AlpacaBrokerClient()
                     order_results = build_order_results(
                         filtered_decisions,
-                        filter_triggered_snapshots(
-                            indicator_snapshots,
-                            triggered_symbols=[
-                                item.symbol for item in filtered_decisions if item.action == "buy"
-                            ],
-                        ),
+                        indicator_snapshots,
+                        positions,
                         account,
                         strategy.max_position_size_pct,
                         broker.place_paper_trade,
@@ -247,6 +346,8 @@ def run_daily_scan(
         positions=positions,
         indicator_snapshots=indicator_snapshots,
         prefilter_result=prefilter_result,
+        strategy_evaluation=strategy_evaluation,
+        local_analysis=local_analysis,
         triggered=prefilter_result.triggered if prefilter_result else [],
         watching=prefilter_result.watching if prefilter_result else [],
         decisions=decisions,

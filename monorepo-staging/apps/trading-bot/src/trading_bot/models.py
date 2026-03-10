@@ -5,6 +5,17 @@ from typing import Literal
 
 
 @dataclass(frozen=True)
+class UniverseConfig:
+    preset: str | None = None
+    symbols: list[str] = field(default_factory=list)
+    include_symbols: list[str] = field(default_factory=list)
+    exclude_symbols: list[str] = field(default_factory=list)
+    shortlist_size: int = 20
+    min_price: float | None = None
+    min_avg_dollar_volume: float | None = None
+
+
+@dataclass(frozen=True)
 class MovingAverageConfig:
     short: int
     long: int
@@ -14,6 +25,12 @@ class MovingAverageConfig:
 class EntryConfig:
     ma_crossover: MovingAverageConfig
     rsi_threshold: float
+    min_rsi: float | None = None
+    max_volatility_20d: float | None = None
+    min_recent_return_5d: float | None = None
+    min_recent_return_20d: float | None = None
+    min_distance_to_ma_20_pct: float | None = None
+    min_distance_to_ma_50_pct: float | None = None
 
 
 @dataclass(frozen=True)
@@ -23,9 +40,26 @@ class ExitConfig:
 
 
 @dataclass(frozen=True)
+class RiskConfig:
+    max_positions: int
+    max_trades_per_day: int
+    max_position_size_pct: float
+    max_sector_exposure_pct: float | None = None
+    allow_pyramiding: bool = False
+
+
+@dataclass(frozen=True)
 class ModelsConfig:
     daily_decision: str
     monitoring: str
+
+    @property
+    def claude_review(self) -> str:
+        return self.daily_decision
+
+    @property
+    def local_analysis(self) -> str:
+        return self.monitoring
 
 
 @dataclass(frozen=True)
@@ -40,6 +74,14 @@ class ExecutionControlsConfig:
     safe_mode: bool
     paper_trade_execution_enabled: bool
     write_logs_by_default: bool
+
+
+@dataclass(frozen=True)
+class ModelRoutingConfig:
+    local_analysis_enabled: bool = True
+    claude_escalation_enabled: bool = True
+    max_candidates_for_local_analysis: int = 20
+    escalate_when_slots_remaining_lte: int = 1
 
 
 @dataclass(frozen=True)
@@ -61,6 +103,28 @@ class StrategyConfig:
     cost_controls: CostControlsConfig
     execution_controls: ExecutionControlsConfig
     paper_to_live: PaperToLiveConfig
+    universe: UniverseConfig | None = None
+    risk: RiskConfig | None = None
+    model_routing: ModelRoutingConfig = field(default_factory=ModelRoutingConfig)
+
+    def __post_init__(self) -> None:
+        if self.universe is None:
+            object.__setattr__(
+                self,
+                "universe",
+                UniverseConfig(symbols=list(self.watchlist)),
+            )
+
+        if self.risk is None:
+            object.__setattr__(
+                self,
+                "risk",
+                RiskConfig(
+                    max_positions=self.max_positions,
+                    max_trades_per_day=self.max_trades_per_day,
+                    max_position_size_pct=self.max_position_size_pct,
+                ),
+            )
 
 
 @dataclass(frozen=True)
@@ -70,6 +134,12 @@ class IndicatorSnapshot:
     ma_20: float
     ma_50: float
     rsi: float
+    recent_return_5d: float = 0.0
+    recent_return_20d: float = 0.0
+    volatility_20d: float = 0.0
+    avg_dollar_volume_20d: float = 0.0
+    distance_to_ma_20_pct: float = 0.0
+    distance_to_ma_50_pct: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -131,6 +201,38 @@ class ScanResult:
 
 
 @dataclass(frozen=True)
+class StrategyCandidate:
+    symbol: str
+    action: Literal["buy", "sell", "watch", "hold", "skip"]
+    reason: str
+    score: float = 0.0
+
+
+@dataclass(frozen=True)
+class StrategyEvaluation:
+    classification: ScanResult
+    candidates: list[StrategyCandidate] = field(default_factory=list)
+    entry_decisions: list["TradeDecision"] = field(default_factory=list)
+    exit_decisions: list["TradeDecision"] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class LocalAnalysisItem:
+    symbol: str
+    action: Literal["buy", "sell", "watch", "hold", "skip"]
+    summary: str
+    confidence: float = 0.0
+
+
+@dataclass(frozen=True)
+class LocalAnalysisResult:
+    summary: str
+    ranked_candidates: list[LocalAnalysisItem] = field(default_factory=list)
+    escalate_to_claude: bool = False
+    escalation_reason: str = ""
+
+
+@dataclass(frozen=True)
 class TradeDecision:
     symbol: str
     action: Literal["buy", "sell", "skip"]
@@ -151,6 +253,8 @@ class DailyScanSummary:
     positions: list[PositionSnapshot] = field(default_factory=list)
     indicator_snapshots: list[IndicatorSnapshot] = field(default_factory=list)
     prefilter_result: ScanResult | None = None
+    strategy_evaluation: StrategyEvaluation | None = None
+    local_analysis: LocalAnalysisResult | None = None
     triggered: list[str] = field(default_factory=list)
     watching: list[str] = field(default_factory=list)
     decisions: list[TradeDecision] = field(default_factory=list)

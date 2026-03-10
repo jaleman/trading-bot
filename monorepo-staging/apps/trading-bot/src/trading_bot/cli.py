@@ -27,13 +27,17 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--include-prefilter",
+        "--include-local-analysis",
+        dest="include_prefilter",
         action="store_true",
-        help="Run the prefilter layer during the staged run.",
+        help="Run the local analysis layer during the staged run.",
     )
     parser.add_argument(
         "--include-decisions",
+        "--include-claude-review",
+        dest="include_decisions",
         action="store_true",
-        help="Run the decision-model layer during the staged run.",
+        help="Generate deterministic decisions and allow optional Claude escalation review.",
     )
     parser.add_argument(
         "--include-broker-context",

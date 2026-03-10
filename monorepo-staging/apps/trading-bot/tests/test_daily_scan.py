@@ -17,7 +17,9 @@ from trading_bot.models import (  # noqa: E402
     AccountSnapshot,
     GuardrailState,
     IndicatorSnapshot,
-    ScanResult,
+    LocalAnalysisItem,
+    LocalAnalysisResult,
+    PositionSnapshot,
     TradeDecision,
 )
 from trading_bot.runtime_paths import AppPaths  # noqa: E402
@@ -107,28 +109,25 @@ class DailyScanGuardrailTests(unittest.TestCase):
 
     @patch("trading_bot.services.daily_scan.ensure_runtime_dirs", side_effect=lambda p: p)
     @patch("trading_bot.services.daily_scan.resolve_paths")
-    def test_daily_scan_skips_decision_call_when_claude_limit_reached(self, mock_paths: MagicMock, _mock_dirs: MagicMock) -> None:
+    def test_daily_scan_generates_deterministic_entry_decision(self, mock_paths: MagicMock, _mock_dirs: MagicMock) -> None:
         self.write_strategy(daily_limit=1)
-        self.write_guardrail_state(claude_calls_today=1)
+        self.write_guardrail_state()
         mock_paths.return_value = self.paths
 
         fake_market = MagicMock()
         fake_market.get_all_indicators.return_value = [
             IndicatorSnapshot(symbol="JPM", current_price=100, ma_20=101, ma_50=99, rsi=25)
         ]
-        fake_prefilter = MagicMock()
-        fake_prefilter.classify.return_value = ScanResult(triggered=["JPM"], watching=[], inactive=[], summary="JPM triggered")
-        fake_decider = MagicMock()
 
-        with patch("trading_bot.services.daily_scan.AlpacaMarketDataClient", return_value=fake_market), \
-             patch("trading_bot.services.daily_scan.OllamaPrefilterClient", return_value=fake_prefilter), \
-             patch("trading_bot.services.daily_scan.ClaudeDecisionClient", return_value=fake_decider):
+        with patch("trading_bot.services.daily_scan.AlpacaMarketDataClient", return_value=fake_market):
             summary = run_daily_scan(include_prefilter=True, include_decisions=True)
 
         self.assertEqual(summary.status, "production-candidate-safe-mode")
-        self.assertEqual(summary.decisions, [])
-        self.assertTrue(any("Claude call guardrail" in note for note in summary.notes))
-        fake_decider.decide.assert_not_called()
+        self.assertEqual([item.symbol for item in summary.decisions], ["JPM"])
+        self.assertEqual([item.action for item in summary.decisions], ["buy"])
+        self.assertEqual(summary.triggered, ["JPM"])
+        self.assertEqual(summary.guardrail_state.claude_calls_today, 0)
+        self.assertTrue(any("Deterministic strategy engine evaluated" in note for note in summary.notes))
 
     @patch("trading_bot.services.daily_scan.ensure_runtime_dirs", side_effect=lambda p: p)
     @patch("trading_bot.services.daily_scan.resolve_paths")
@@ -141,17 +140,11 @@ class DailyScanGuardrailTests(unittest.TestCase):
         fake_market.get_all_indicators.return_value = [
             IndicatorSnapshot(symbol="JPM", current_price=100, ma_20=101, ma_50=99, rsi=25)
         ]
-        fake_prefilter = MagicMock()
-        fake_prefilter.classify.return_value = ScanResult(triggered=["JPM"], watching=[], inactive=[], summary="JPM triggered")
-        fake_decider = MagicMock()
-        fake_decider.decide.return_value = [TradeDecision(symbol="JPM", action="buy", reason="ok")]
         fake_broker = MagicMock()
         fake_broker.get_account_balance.return_value = AccountSnapshot(cash=1000, portfolio_value=1000, buying_power=1000)
         fake_broker.get_open_positions.return_value = []
 
         with patch("trading_bot.services.daily_scan.AlpacaMarketDataClient", return_value=fake_market), \
-             patch("trading_bot.services.daily_scan.OllamaPrefilterClient", return_value=fake_prefilter), \
-             patch("trading_bot.services.daily_scan.ClaudeDecisionClient", return_value=fake_decider), \
              patch("trading_bot.services.daily_scan.AlpacaBrokerClient", return_value=fake_broker):
             summary = run_daily_scan(
                 include_prefilter=True,
@@ -162,8 +155,146 @@ class DailyScanGuardrailTests(unittest.TestCase):
 
         self.assertEqual(summary.status, "production-candidate-safe-mode")
         self.assertEqual(summary.order_results, [])
+        self.assertEqual([item.action for item in summary.decisions], ["buy"])
         self.assertTrue(any("Execution blocked because safe mode is enabled." in note for note in summary.notes))
         fake_broker.place_paper_trade.assert_not_called()
+
+    @patch("trading_bot.services.daily_scan.ensure_runtime_dirs", side_effect=lambda p: p)
+    @patch("trading_bot.services.daily_scan.resolve_paths")
+    def test_daily_scan_runs_local_analysis_on_shortlist(self, mock_paths: MagicMock, _mock_dirs: MagicMock) -> None:
+        self.write_strategy()
+        self.write_guardrail_state()
+        mock_paths.return_value = self.paths
+
+        fake_market = MagicMock()
+        fake_market.get_all_indicators.return_value = [
+            IndicatorSnapshot(symbol="JPM", current_price=100, ma_20=101, ma_50=99, rsi=25)
+        ]
+        fake_local_analysis = MagicMock()
+        fake_local_analysis.analyze.return_value = LocalAnalysisResult(
+            summary="JPM looks like the cleanest long setup.",
+            ranked_candidates=[
+                LocalAnalysisItem(
+                    symbol="JPM",
+                    action="buy",
+                    summary="Trend quality is clean relative to the shortlist.",
+                    confidence=0.83,
+                )
+            ],
+            escalate_to_claude=False,
+            escalation_reason="",
+        )
+
+        with patch("trading_bot.services.daily_scan.AlpacaMarketDataClient", return_value=fake_market), \
+             patch("trading_bot.services.daily_scan.OllamaLocalAnalysisClient", return_value=fake_local_analysis):
+            summary = run_daily_scan(include_prefilter=True, include_decisions=True)
+
+        self.assertIsNotNone(summary.local_analysis)
+        self.assertEqual(summary.local_analysis.summary, "JPM looks like the cleanest long setup.")
+        self.assertEqual(summary.local_analysis.ranked_candidates[0].symbol, "JPM")
+        self.assertTrue(any("Local analysis ranked 1 candidate(s)." in note for note in summary.notes))
+
+    @patch("trading_bot.services.daily_scan.ensure_runtime_dirs", side_effect=lambda p: p)
+    @patch("trading_bot.services.daily_scan.resolve_paths")
+    def test_daily_scan_skips_local_analysis_without_actionable_candidates(self, mock_paths: MagicMock, _mock_dirs: MagicMock) -> None:
+        self.write_strategy()
+        self.write_guardrail_state()
+        mock_paths.return_value = self.paths
+
+        fake_market = MagicMock()
+        fake_market.get_all_indicators.return_value = [
+            IndicatorSnapshot(symbol="JPM", current_price=100, ma_20=100.5, ma_50=100, rsi=35)
+        ]
+        fake_local_analysis = MagicMock()
+
+        with patch("trading_bot.services.daily_scan.AlpacaMarketDataClient", return_value=fake_market), \
+             patch("trading_bot.services.daily_scan.OllamaLocalAnalysisClient", return_value=fake_local_analysis):
+            summary = run_daily_scan(include_prefilter=True, include_decisions=True)
+
+        self.assertIsNone(summary.local_analysis)
+        self.assertEqual(summary.decisions, [])
+        self.assertTrue(any(
+            "Local analysis skipped because there were no actionable deterministic candidates." in note
+            for note in summary.notes
+        ))
+        fake_local_analysis.analyze.assert_not_called()
+
+    @patch("trading_bot.services.daily_scan.ensure_runtime_dirs", side_effect=lambda p: p)
+    @patch("trading_bot.services.daily_scan.resolve_paths")
+    def test_daily_scan_uses_claude_escalation_when_requested(self, mock_paths: MagicMock, _mock_dirs: MagicMock) -> None:
+        self.write_strategy()
+        self.write_guardrail_state()
+        mock_paths.return_value = self.paths
+
+        fake_market = MagicMock()
+        fake_market.get_all_indicators.return_value = [
+            IndicatorSnapshot(symbol="JPM", current_price=100, ma_20=101, ma_50=99, rsi=25)
+        ]
+        fake_local_analysis = MagicMock()
+        fake_local_analysis.analyze.return_value = LocalAnalysisResult(
+            summary="JPM is strong, but only one slot remains.",
+            ranked_candidates=[
+                LocalAnalysisItem(
+                    symbol="JPM",
+                    action="buy",
+                    summary="Best long setup in the shortlist.",
+                    confidence=0.71,
+                )
+            ],
+            escalate_to_claude=True,
+            escalation_reason="One remaining slot with a meaningful buy candidate.",
+        )
+        fake_claude = MagicMock()
+        fake_claude.review.return_value = [
+            TradeDecision(symbol="JPM", action="skip", reason="Wait for stronger confirmation.")
+        ]
+
+        with patch("trading_bot.services.daily_scan.AlpacaMarketDataClient", return_value=fake_market), \
+             patch("trading_bot.services.daily_scan.OllamaLocalAnalysisClient", return_value=fake_local_analysis), \
+             patch("trading_bot.services.daily_scan.ClaudeDecisionClient", return_value=fake_claude):
+            summary = run_daily_scan(include_prefilter=True, include_decisions=True)
+
+        self.assertEqual([item.action for item in summary.decisions], ["skip"])
+        self.assertEqual(summary.guardrail_state.claude_calls_today, 1)
+        fake_claude.review.assert_called_once()
+        self.assertTrue(any("Claude escalation reviewed candidates" in note for note in summary.notes))
+
+    @patch("trading_bot.services.daily_scan.ensure_runtime_dirs", side_effect=lambda p: p)
+    @patch("trading_bot.services.daily_scan.resolve_paths")
+    def test_daily_scan_generates_deterministic_exit_decision(self, mock_paths: MagicMock, _mock_dirs: MagicMock) -> None:
+        self.write_strategy()
+        self.write_guardrail_state()
+        mock_paths.return_value = self.paths
+
+        fake_market = MagicMock()
+        fake_market.get_all_indicators.return_value = [
+            IndicatorSnapshot(symbol="JPM", current_price=100, ma_20=98, ma_50=101, rsi=45)
+        ]
+        fake_broker = MagicMock()
+        fake_broker.get_account_balance.return_value = AccountSnapshot(cash=1000, portfolio_value=1000, buying_power=1000)
+        fake_broker.get_open_positions.return_value = [
+            PositionSnapshot(
+                symbol="JPM",
+                qty=5,
+                avg_entry_price=90,
+                current_price=100,
+                unrealized_pl=50,
+                unrealized_plpc=0.11,
+            )
+        ]
+
+        with patch("trading_bot.services.daily_scan.AlpacaMarketDataClient", return_value=fake_market), \
+             patch("trading_bot.services.daily_scan.AlpacaBrokerClient", return_value=fake_broker):
+            summary = run_daily_scan(
+                include_market_data=True,
+                include_decisions=True,
+                include_broker_context=True,
+            )
+
+        self.assertEqual(summary.status, "production-candidate-safe-mode")
+        self.assertEqual([item.action for item in summary.decisions], ["sell"])
+        self.assertEqual([item.symbol for item in summary.decisions], ["JPM"])
+        self.assertTrue(any("Exit signal confirmed" in item.reason for item in summary.decisions))
 
     @patch("trading_bot.services.daily_scan.ensure_runtime_dirs", side_effect=lambda p: p)
     @patch("trading_bot.services.daily_scan.resolve_paths")

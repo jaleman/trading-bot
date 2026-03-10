@@ -1,19 +1,43 @@
 {
-  "watchlist": ["NVDA", "MSFT", "UNH", "JNJ", "KO", "COST", "JPM", "V", "CAT", "HON", "BRK.B", "SPY"],
-  "max_positions": 4,
-  "max_trades_per_day": 2,
-  "max_position_size_pct": 25,
+  "universe": {
+    "preset": "core-liquid",
+    "symbols": [],
+    "include_symbols": [],
+    "exclude_symbols": [],
+    "shortlist_size": 20,
+    "min_price": 20,
+    "min_avg_dollar_volume": 15000000
+  },
   "entry": {
     "ma_crossover": { "short": 20, "long": 50 },
-    "rsi_threshold": 30
+    "min_rsi": 40,
+    "rsi_threshold": 60,
+    "max_volatility_20d": 4.5,
+    "min_recent_return_5d": 0.0,
+    "min_recent_return_20d": -3.0,
+    "min_distance_to_ma_20_pct": 0.0,
+    "min_distance_to_ma_50_pct": 0.0
   },
   "exit": {
     "profit_target_pct": 10,
     "stop_loss_pct": 4.5
   },
+  "risk": {
+    "max_positions": 4,
+    "max_trades_per_day": 2,
+    "max_position_size_pct": 25,
+    "max_sector_exposure_pct": null,
+    "allow_pyramiding": false
+  },
   "models": {
-    "daily_decision": "claude-sonnet-4-6",
-    "monitoring": "qwen2.5:7b"
+    "local_analysis": "qwen2.5:7b",
+    "claude_review": "claude-sonnet-4-6"
+  },
+  "model_routing": {
+    "local_analysis_enabled": true,
+    "claude_escalation_enabled": true,
+    "max_candidates_for_local_analysis": 15,
+    "escalate_when_slots_remaining_lte": 1
   },
   "cost_controls": {
     "daily_claude_call_limit": 5,

@@ -27,6 +27,7 @@ from trading_bot.services.guardrails import (  # noqa: E402
     evaluate_execution_policy,
     evaluate_position_size,
     evaluate_trade_limits,
+    validate_execution_intents,
 )
 
 
@@ -122,6 +123,53 @@ class GuardrailTests(unittest.TestCase):
 
         self.assertFalse(status.allowed)
         self.assertIn("Position sizing unavailable", status.reasons[0])
+
+    def test_execution_firewall_blocks_duplicate_executable_symbols(self) -> None:
+        strategy = build_strategy()
+        decisions = [
+            TradeDecision(symbol="JPM", action="buy", reason="first"),
+            TradeDecision(symbol="JPM", action="sell", reason="second", qty=1),
+        ]
+
+        filtered, status = validate_execution_intents(
+            strategy,
+            decisions,
+            [],
+            AccountSnapshot(cash=1000, portfolio_value=1000, buying_power=1000),
+        )
+
+        self.assertEqual(len(filtered), 1)
+        self.assertFalse(status.allowed)
+        self.assertIn("Blocked duplicate executable action for JPM.", status.reasons)
+
+    def test_execution_firewall_blocks_sell_without_position(self) -> None:
+        strategy = build_strategy()
+        filtered, status = validate_execution_intents(
+            strategy,
+            [TradeDecision(symbol="JPM", action="sell", reason="exit", qty=1)],
+            [],
+            AccountSnapshot(cash=1000, portfolio_value=1000, buying_power=1000),
+        )
+
+        self.assertEqual(filtered, [])
+        self.assertFalse(status.allowed)
+        self.assertIn("Blocked sell for JPM because no open position exists.", status.reasons)
+
+    def test_execution_firewall_blocks_buy_when_position_exists_and_pyramiding_disabled(self) -> None:
+        strategy = build_strategy()
+        filtered, status = validate_execution_intents(
+            strategy,
+            [TradeDecision(symbol="JPM", action="buy", reason="entry")],
+            [PositionSnapshot("JPM", 1, 90, 100, 10, 0.11)],
+            AccountSnapshot(cash=1000, portfolio_value=1000, buying_power=1000),
+        )
+
+        self.assertEqual(filtered, [])
+        self.assertFalse(status.allowed)
+        self.assertIn(
+            "Blocked buy for JPM because the position already exists and pyramiding is disabled.",
+            status.reasons,
+        )
 
 
 if __name__ == "__main__":

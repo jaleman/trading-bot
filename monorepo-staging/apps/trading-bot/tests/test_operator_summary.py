@@ -78,6 +78,80 @@ class OperatorSummaryTests(unittest.TestCase):
 		self.assertNotIn("Safe mode remained active", summary_text)
 		self.assertIn("Decisions: 1 buy, 0 sell, 0 skip.", summary_text)
 
+	def test_format_operator_summary_reports_local_analysis_and_claude_review(self) -> None:
+		payload = {
+			"timestamp": "2026-03-09T09:35:00",
+			"summary": {
+				"status": "production-candidate",
+				"notes": [
+					"Local analysis summary: JPM is the cleanest setup.",
+					"Claude escalation reviewed candidates: one remaining slot.",
+				],
+				"indicator_snapshots": [{"symbol": "JPM"}, {"symbol": "MSFT"}],
+				"triggered": ["JPM"],
+				"watching": ["MSFT"],
+				"decisions": [{"symbol": "JPM", "action": "buy"}],
+				"local_analysis": {
+					"summary": "JPM is the cleanest setup.",
+					"ranked_candidates": [
+						{"symbol": "JPM", "action": "buy", "summary": "Strong trend.", "confidence": 0.83}
+					]
+				},
+				"order_results": [],
+				"guardrails": [{"name": "execution_policy", "allowed": True}],
+				"guardrail_state": {"claude_calls_today": 1, "trades_today": 0},
+			},
+		}
+
+		summary_text = format_operator_summary(payload)
+
+		self.assertIn("Local analysis: JPM is the cleanest setup.", summary_text)
+		self.assertIn("Top ranked: JPM (buy, confidence 0.83).", summary_text)
+		self.assertIn("Claude escalation reviewed the shortlist.", summary_text)
+
+	def test_format_operator_summary_reports_blocked_watch_reasons_when_no_decisions(self) -> None:
+		payload = {
+			"timestamp": "2026-03-09T19:58:21",
+			"summary": {
+				"status": "production-candidate",
+				"notes": [],
+				"indicator_snapshots": [{"symbol": "AAPL"}, {"symbol": "CAT"}, {"symbol": "SPY"}],
+				"triggered": [],
+				"watching": ["CAT", "AAPL", "SPY"],
+				"decisions": [],
+				"strategy_evaluation": {
+					"candidates": [
+						{
+							"symbol": "CAT",
+							"action": "watch",
+							"reason": "Entry not confirmed: RSI is 33.96 versus threshold 30.00.",
+							"score": 5.76,
+						},
+						{
+							"symbol": "AAPL",
+							"action": "watch",
+							"reason": "Entry not confirmed: RSI is 44.70 versus threshold 30.00.",
+							"score": 0.5,
+						},
+						{
+							"symbol": "SPY",
+							"action": "watch",
+							"reason": "Entry not confirmed: MA gap is -0.37% and must remain positive.",
+							"score": 0.2,
+						},
+					],
+				},
+				"order_results": [],
+				"guardrails": [{"name": "execution_policy", "allowed": True}],
+				"guardrail_state": {"claude_calls_today": 0, "trades_today": 0},
+			},
+		}
+
+		summary_text = format_operator_summary(payload)
+
+		self.assertIn("Blocked setups: CAT: RSI is 33.96 versus threshold 30.00.", summary_text)
+		self.assertIn("AAPL: RSI is 44.70 versus threshold 30.00.", summary_text)
+
 
 if __name__ == "__main__":
 	unittest.main()
