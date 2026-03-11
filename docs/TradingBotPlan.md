@@ -1,5 +1,5 @@
 # Trading Bot Implementation Plan
-*Updated March 9, 2026 — Reflects the live monorepo runtime, post-cutover status, and current paper-trading phase*
+*Updated March 10, 2026 — Reflects the live monorepo runtime, post-cutover status, and current paper-trading phase*
 
 ---
 
@@ -16,6 +16,7 @@ The repository has moved beyond the original single-root implementation plan.
 - the active scheduled runtime now lives under `monorepo-staging/`
 - OpenClaw is the outer runtime and Telegram/operator interface
 - the Python trading engine now runs through wrapper scripts rather than direct `main.py` execution
+- Telegram operator commands now prefer a native `/bot` workspace command that routes into repo-managed wrappers
 - the legacy root-level implementation remains available as historical reference and fallback context, but it is no longer the intended scheduled path
 
 The current managed live path is:
@@ -23,6 +24,13 @@ The current managed live path is:
 1. OpenClaw cron job `trading-bot-daily-scan`
 2. wrapper execution via `monorepo-staging/scripts/run_trading_bot_rehearsal.sh`
 3. operator summary delivery via `monorepo-staging/scripts/print_trading_bot_operator_summary.sh`
+
+The current managed operator-command path is:
+
+1. Telegram operator sends `/bot <subcommand>`
+2. the deployed native workspace command handles `/bot`
+3. it dispatches `monorepo-staging/scripts/run_trading_bot_telegram_command.sh`
+4. that router calls the correct repo-managed wrapper for summary, pending orders, runtime status, balances, holdings, stock info, sync, or restart
 
 ---
 
@@ -181,9 +189,9 @@ trading-bot/
   │       │   └── strategy.local.json    # local-only runtime config
   │       ├── src/trading_bot/
   │       └── tests/
-  ├── openclaw/                     # deployed OpenClaw-facing assets and cutover docs
+  ├── openclaw/                     # deployed OpenClaw-facing assets, workspace extensions, and cutover docs
   ├── runtime/                      # runtime state, deployment snapshots, logs, guardrails
-  └── scripts/                      # canonical wrapper, summary, bootstrap, and test scripts
+  └── scripts/                      # canonical wrapper, operator-command, sync, restart, bootstrap, and test scripts
 ```
 
 ### Runtime Config Structure (Current Direction)
@@ -243,7 +251,7 @@ The tracked example config remains the template for local operator files.
 
 ## Current Status & Next Steps
 
-*Last updated: March 9, 2026 — Monorepo cutover complete, paper-trade validation active*
+*Last updated: March 10, 2026 — Monorepo cutover complete, paper-trade validation active*
 
 **Completed:**
 - Mac Mini M4 purchased and designated as trading machine
@@ -261,6 +269,8 @@ The tracked example config remains the template for local operator files.
 - controlled cutover to the monorepo runtime completed on March 8, 2026
 - live OpenClaw trading job enabled on March 8, 2026 after verification and backup
 - live OpenClaw default operator-chat model switched to `ollama/qwen2.5:7b`
+- native `/bot` workspace command added under tracked OpenClaw workspace extensions for deterministic Telegram operator routing
+- repo-managed operator wrappers added for supported-command help, summary, pending orders, runtime status, balances, holdings, stock info, workspace sync, and gateway restart
 - deterministic strategy engine, local analysis, optional Claude escalation, broker adapter, runtime logging, and guardrails are all ported into the monorepo app
 - paper-trade execution was exercised successfully on March 9, 2026 with guardrails passing
 - latest managed-runtime paper trades executed for `BRK.B` and `COST` with accepted paper orders
@@ -274,6 +284,7 @@ It is now in the managed-runtime validation phase:
 |------|---------------|
 | OpenClaw runtime | live and cut over to monorepo assets |
 | Scheduled job | enabled and wrapper-based |
+| Operator commands | native `/bot` path active with repo-managed routing |
 | Operator summaries | generated from structured runtime artifacts |
 | Guardrails | enforced for execution policy, sizing, trade counts, and final intent validation |
 | Paper trading | active under the monorepo runtime |

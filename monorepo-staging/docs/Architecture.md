@@ -2,7 +2,7 @@
 
 ## Current Status
 
-As of March 8, 2026, the repository has moved beyond an initial scaffold.
+As of March 10, 2026, the repository has moved beyond an initial scaffold.
 
 The live trading-bot path is now a hybrid of:
 
@@ -11,6 +11,7 @@ The live trading-bot path is now a hybrid of:
 	- isolated session execution
 	- Telegram delivery
 	- operator workspace behavior files under `~/.openclaw/workspace/`
+	- native `/bot` operator command registration from `~/.openclaw/workspace/.openclaw/extensions/`
 2. **The monorepo-managed trading bot implementation**
 	- wrapper-script based execution from `~/trading-bot/monorepo-staging/`
 	- Python package under `apps/trading-bot/`
@@ -33,6 +34,12 @@ Its current live payload is wrapper-based:
 
 This means OpenClaw owns job orchestration and delivery, while the monorepo app owns trading-bot execution behavior and operator summary generation.
 
+For Telegram operator commands, the live path is also wrapper-based:
+
+1. the deployed native `/bot` workspace command receives the operator request
+2. that command invokes `~/trading-bot/monorepo-staging/scripts/run_trading_bot_telegram_command.sh`
+3. the router dispatches the appropriate repo-managed wrapper and returns stdout to Telegram
+
 For operator chat and general Telegram questions, the live OpenClaw default model is now `ollama/qwen2.5:7b`.
 
 Claude remains part of the overall system, but only as an explicitly retained provider for trading-bot decision paths and possible escalation scenarios rather than the default operator conversation path.
@@ -48,6 +55,7 @@ Responsibilities:
 - isolated session targeting
 - Telegram delivery target and mode
 - workspace behavior and operator instructions
+- native `/bot` command registration and deterministic operator command routing
 - top-level runtime identity for the bot session
 - default operator chat model routing via local Ollama/qwen
 
@@ -60,6 +68,7 @@ Key staged sources:
 - `openclaw/workspace/SOUL.md`
 - `openclaw/workspace/TOOLS.md`
 - `openclaw/workspace/USER.md`
+- `openclaw/workspace/.openclaw/extensions/bot-command/`
 - `openclaw/cron/trading-bot-daily-scan.template.json`
 
 ### 2. Script and entrypoint layer
@@ -68,12 +77,21 @@ The script layer is the stable execution boundary between OpenClaw and the Pytho
 
 Current canonical scripts:
 - `scripts/bootstrap_trading_bot.sh`
+- `scripts/print_trading_bot_balance.sh`
+- `scripts/print_trading_bot_holdings.sh`
 - `scripts/run_trading_bot.sh`
 - `scripts/run_trading_bot_rehearsal.sh`
 - `scripts/run_trading_bot_tests.sh`
 - `scripts/print_trading_bot_operator_summary.sh`
+- `scripts/print_trading_bot_pending_orders.sh`
+- `scripts/print_trading_bot_runtime_status.sh`
+- `scripts/print_trading_bot_stock_info.sh`
+- `scripts/print_trading_bot_supported_commands.sh`
+- `scripts/restart_openclaw_gateway.sh`
+- `scripts/run_trading_bot_telegram_command.sh`
 - `scripts/prepare_openclaw_cutover_jobs.sh`
 - `scripts/merge_openclaw_trading_job.py`
+- `scripts/sync_openclaw_workspace.sh`
 
 Why this layer exists:
 - avoids fragile deep-path Python commands in cron payloads
@@ -104,6 +122,7 @@ Current module boundaries:
 - `trading_bot.runtime_paths` — monorepo path resolution
 - `trading_bot.config_loader` — strategy config loading
 - `trading_bot.env_loader` — env loading
+- `trading_bot.operator_commands` — operator-facing command formatting and command-line entrypoints
 - `trading_bot.operator_summary` — operator-facing summary generation from runtime artifacts
 
 #### Service layer
@@ -170,6 +189,15 @@ The current end-to-end execution model is:
 7. OpenClaw then runs `scripts/print_trading_bot_operator_summary.sh`
 8. The generated operator summary is delivered to Telegram
 
+The current operator-command model is:
+
+1. Telegram sends an exact operator command such as `/bot summary` or `/bot holdings`
+2. OpenClaw resolves that request through the deployed native `/bot` workspace command
+3. the native command invokes `scripts/run_trading_bot_telegram_command.sh`
+4. the router normalizes the command and dispatches the correct wrapper
+5. the wrapper calls `trading_bot.operator_commands` or the relevant operational helper script
+6. wrapper stdout is returned to Telegram without freeform reinterpretation
+
 ## Safety Model
 
 The current live path is intentionally conservative.
@@ -179,6 +207,7 @@ Safety characteristics:
 - Claude calls are guarded by daily counters
 - trade count and position limits are enforced
 - execution policy is mediated by guardrail checks
+- exact Telegram operator commands are routed deterministically rather than interpreted as open-ended chat prompts
 - operator messaging is generated from structured summary artifacts rather than improvised from raw logs
 
 This architecture was chosen to preserve proven behavior while reducing ambiguity during operations.

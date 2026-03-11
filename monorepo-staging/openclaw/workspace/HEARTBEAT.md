@@ -22,14 +22,7 @@ tail -30 ~/trading-bot/monorepo-staging/runtime/trading-bot/logs/trades.log
 
 ### 1b. Optional broker-state check when order status matters
 ```bash
-cd ~/trading-bot/monorepo-staging/apps/trading-bot && PYTHONPATH=src ./.venv/bin/python - <<'PY'
-from trading_bot.env_loader import load_runtime_env
-from trading_bot.integrations.broker import AlpacaBrokerClient
-
-load_runtime_env()
-client = AlpacaBrokerClient()
-print(client.get_trade_history(limit=10))
-PY
+~/trading-bot/monorepo-staging/scripts/print_trading_bot_pending_orders.sh
 ```
 
 Use this only when the operator asks whether submitted buys are pending, accepted, or filled.

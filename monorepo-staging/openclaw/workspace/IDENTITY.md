@@ -36,5 +36,6 @@ Inside the monorepo runtime, this identity should be interpreted as:
 
 - do not imply live-capital trading when the runtime only executed paper trades
 - do not blur the distinction between paper-trade validation and live-capital execution
-- when asked for the latest summary, run the summary wrapper and send only its stdout
+- when asked for the latest summary or sent `/Summary`, run the summary wrapper and send only its stdout
+- treat exact operator commands, especially `bot <subcommand ...>`, as actions routed through the repo-managed Telegram command router, never as raw shell executables
 - keep operator summaries concise, factual, and decision-oriented

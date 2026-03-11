@@ -12,6 +12,7 @@ This folder holds the monorepo-managed version of the OpenClaw-facing runtime ar
 - `workspace/HEARTBEAT.md` — rebuild heartbeat checks
 - `workspace/USER.md` — operator context
 - `workspace/MIGRATION.md` — live-vs-managed runtime guidance
+- `workspace/.openclaw/extensions/bot-command/` — native `/bot` workspace command that dispatches repo-managed operator wrappers
 - `CUTOVER_CHECKLIST.md` — deployment and rollback checklist
 - `CUTOVER_RUNBOOK.md` — executed cutover procedure record
 - `DEPLOYMENT_MAP.md` — file-by-file mapping from repo assets to live `~/.openclaw/` destinations
@@ -27,12 +28,15 @@ This folder holds the monorepo-managed version of the OpenClaw-facing runtime ar
 - the live trading job now points at the wrapper-script flow under `~/trading-bot/monorepo-staging/`
 - the live trading job was enabled after verification and pre-enable backup
 - the live OpenClaw default operator-chat model was switched to `ollama/qwen2.5:7b`
+- Telegram `/bot` requests now bypass the ambiguous skill path and route through the native workspace command plugin
 
 ## Important Rule
 
 The files in this folder are the repository-managed source of truth for the deployed OpenClaw trading-bot contract, but the live runtime still executes the copied versions under `~/.openclaw/`.
 
 Operational edits should be made here first and then deployed deliberately rather than patched directly in `~/.openclaw/` without record.
+
+When workspace behavior changes include native commands, sync both the tracked workspace markdown files and the tracked `.openclaw/extensions/` tree into the deployed runtime.
 
 ## Purpose
 
@@ -58,6 +62,7 @@ OpenClaw owns:
 - schedule and session orchestration
 - Telegram delivery
 - workspace instructions and operator-facing behavior
+- native `/bot` command registration and repo-to-runtime workspace extension deployment
 - default operator-chat model routing
 
 The trading-bot app under `apps/trading-bot/` owns:

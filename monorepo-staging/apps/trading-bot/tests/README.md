@@ -17,6 +17,7 @@ This directory is reserved for tests for the rebuilt trading app.
 - trade-limit blocking
 - max-position blocking
 - safe-mode execution blocking in the staged daily scan flow
+- operator command formatting for supported-command help, summary freshness, pending orders, runtime status, balances, holdings, and stock info output
 
 ## Current Runner
 

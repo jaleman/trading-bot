@@ -12,10 +12,10 @@ elif [[ -x "$APP_VENV_PYTHON" ]]; then
 	RESOLVED_PYTHON_BIN="$APP_VENV_PYTHON"
 else
 	echo "Missing app-local Python environment: $APP_VENV_PYTHON" >&2
-	echo "Run $REPO_ROOT/scripts/bootstrap_trading_bot.sh before printing the operator summary." >&2
+	echo "Run $REPO_ROOT/scripts/bootstrap_trading_bot.sh before printing supported commands." >&2
 	exit 1
 fi
 
 export PYTHONPATH="$APP_DIR/src${PYTHONPATH:+:$PYTHONPATH}"
 cd "$APP_DIR"
-exec "$RESOLVED_PYTHON_BIN" -m trading_bot.operator_commands summary "$@"
+exec "$RESOLVED_PYTHON_BIN" -m trading_bot.operator_commands list-commands "$@"

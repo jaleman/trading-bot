@@ -18,6 +18,7 @@ This app owns:
 - deterministic strategy evaluation
 - local analysis and optional Claude escalation
 - broker integration and guarded paper-trade execution
+- operator command formatting for summary, balance, holdings, pending orders, runtime status, and stock snapshots
 - structured runtime artifacts, summaries, and tests
 
 OpenClaw owns scheduling, Telegram delivery, workspace behavior files, and top-level operator orchestration.
@@ -37,6 +38,7 @@ The app is no longer just a scaffold.
 - [.env.example](.env.example) — local env template
 - [config/strategy.example.json](config/strategy.example.json) — tracked strategy template
 - [src/trading_bot](src/trading_bot) — package source
+- [src/trading_bot/operator_commands.py](src/trading_bot/operator_commands.py) — operator-facing command formatter entrypoint used by the wrapper scripts
 - [tests](tests) — staged unittest coverage
 
 ## Quickstart
@@ -57,6 +59,13 @@ The preferred local runtime files are:
 - [../../scripts/run_trading_bot.sh](../../scripts/run_trading_bot.sh) — canonical wrapper for direct app execution
 - [../../scripts/run_trading_bot_rehearsal.sh](../../scripts/run_trading_bot_rehearsal.sh) — validated wrapper used by the live scheduled job
 - [../../scripts/print_trading_bot_operator_summary.sh](../../scripts/print_trading_bot_operator_summary.sh) — print the latest operator summary from runtime artifacts
+- [../../scripts/print_trading_bot_supported_commands.sh](../../scripts/print_trading_bot_supported_commands.sh) — print the supported Telegram/OpenClaw command surface
+- [../../scripts/print_trading_bot_balance.sh](../../scripts/print_trading_bot_balance.sh) — print the aggregate account balance view
+- [../../scripts/print_trading_bot_holdings.sh](../../scripts/print_trading_bot_holdings.sh) — print the open-position breakdown
+- [../../scripts/print_trading_bot_pending_orders.sh](../../scripts/print_trading_bot_pending_orders.sh) — print current open orders
+- [../../scripts/print_trading_bot_runtime_status.sh](../../scripts/print_trading_bot_runtime_status.sh) — print staged runtime health and artifact status
+- [../../scripts/print_trading_bot_stock_info.sh](../../scripts/print_trading_bot_stock_info.sh) — print market snapshot data for one ticker
+- [../../scripts/run_trading_bot_telegram_command.sh](../../scripts/run_trading_bot_telegram_command.sh) — route a Telegram or OpenClaw operator command into the correct wrapper
 - [../../scripts/run_trading_bot_tests.sh](../../scripts/run_trading_bot_tests.sh) — run the staged unittest suite
 
 ## CLI Entry Point

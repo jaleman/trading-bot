@@ -10,6 +10,7 @@ It is now the active managed runtime path for the live trading-bot OpenClaw job,
 - controlled cutover completed on March 8, 2026
 - live trading job enabled on March 8, 2026
 - OpenClaw now runs the trading bot through the wrapper flow in this directory
+- Telegram operator commands now route through a native `/bot` workspace command backed by repo-managed wrappers
 - paper-trade execution was exercised successfully on March 9, 2026 with guardrails passing
 - the current live phase is post-cutover validation under the monorepo-managed runtime
 - the legacy root repo remains available as historical reference and fallback context
@@ -49,6 +50,7 @@ The current live scheduled path is:
 - OpenClaw cron job `trading-bot-daily-scan`
 - execution wrapper: [scripts/run_trading_bot_rehearsal.sh](scripts/run_trading_bot_rehearsal.sh)
 - summary wrapper: [scripts/print_trading_bot_operator_summary.sh](scripts/print_trading_bot_operator_summary.sh)
+- Telegram command router: [scripts/run_trading_bot_telegram_command.sh](scripts/run_trading_bot_telegram_command.sh)
 - deployed OpenClaw workspace files under `~/.openclaw/workspace/`
 
 Despite the wrapper name, this path is now the live scheduled job contract.
@@ -96,9 +98,13 @@ This monorepo directory is the implemented result of that plan's first productio
 
 - Bootstrap app env: [scripts/bootstrap_trading_bot.sh](scripts/bootstrap_trading_bot.sh)
 - Print latest operator summary: [scripts/print_trading_bot_operator_summary.sh](scripts/print_trading_bot_operator_summary.sh)
+- Print supported operator commands: [scripts/print_trading_bot_supported_commands.sh](scripts/print_trading_bot_supported_commands.sh)
+- Route a Telegram operator command: [scripts/run_trading_bot_telegram_command.sh](scripts/run_trading_bot_telegram_command.sh)
 - Run supervised rehearsal: [scripts/run_trading_bot_rehearsal.sh](scripts/run_trading_bot_rehearsal.sh)
 - Run app directly: [scripts/run_trading_bot.sh](scripts/run_trading_bot.sh)
 - Run tests: [scripts/run_trading_bot_tests.sh](scripts/run_trading_bot_tests.sh)
+- Sync the deployed OpenClaw workspace: [scripts/sync_openclaw_workspace.sh](scripts/sync_openclaw_workspace.sh)
+- Restart the OpenClaw gateway: [scripts/restart_openclaw_gateway.sh](scripts/restart_openclaw_gateway.sh)
 
 ## Recommended Reading
 

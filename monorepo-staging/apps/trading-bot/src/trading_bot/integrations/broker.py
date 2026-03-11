@@ -3,8 +3,8 @@ from __future__ import annotations
 import os
 
 from alpaca.trading.client import TradingClient
-from alpaca.trading.enums import OrderSide, TimeInForce
-from alpaca.trading.requests import MarketOrderRequest
+from alpaca.trading.enums import OrderSide, QueryOrderStatus, TimeInForce
+from alpaca.trading.requests import GetOrdersRequest, MarketOrderRequest
 
 from trading_bot.models import AccountSnapshot, OrderResult, PositionSnapshot, TradeHistoryEntry
 
@@ -59,6 +59,28 @@ class AlpacaBrokerClient:
             )
             for position in positions
         ]
+
+    def get_open_orders(self, limit: int = 20) -> list[OrderResult]:
+        orders = self.client.get_orders(
+            GetOrdersRequest(status=QueryOrderStatus.OPEN, limit=limit)
+        )
+        return [
+            OrderResult(
+                id=str(order.id),
+                symbol=order.symbol,
+                qty=float(order.qty) if order.qty else 0,
+                side=str(order.side),
+                status=str(order.status),
+            )
+            for order in orders
+        ]
+
+    def get_asset_name(self, symbol: str) -> str | None:
+        asset = self.client.get_asset(symbol)
+        if not asset.name:
+            return None
+
+        return asset.name.strip() or None
 
     def place_paper_trade(self, symbol: str, qty: int, side: str) -> OrderResult:
         order = self.client.submit_order(

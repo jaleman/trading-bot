@@ -31,6 +31,9 @@ When starting from this workspace, OpenClaw should:
 - prefer execution through the monorepo wrapper scripts
 - remain explicit that live-capital trading has **not** been approved
 - use the summary wrapper for latest-summary requests instead of improvised recaps
+- prefer the native `/bot <subcommand ...>` workspace command for Telegram operator requests
+- after the initial startup greeting, treat `bot <subcommand ...>` as `~/trading-bot/monorepo-staging/scripts/run_trading_bot_telegram_command.sh '<final non-empty line>'` rather than normal chat
+- never try to execute `bot`, `/List`, or any command token directly in the shell
 
 ## Safety Rule
 

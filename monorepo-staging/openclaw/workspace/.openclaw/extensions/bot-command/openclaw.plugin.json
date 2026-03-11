@@ -1,0 +1,10 @@
+{
+  "id": "bot-command",
+  "name": "Trading Bot Command",
+  "description": "Native /bot command dispatcher for Telegram operator actions.",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}
