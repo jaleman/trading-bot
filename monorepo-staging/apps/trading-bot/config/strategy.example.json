@@ -30,7 +30,7 @@
     "allow_pyramiding": false
   },
   "models": {
-    "local_analysis": "qwen2.5:7b",
+    "local_analysis": "gemma4:e4b-mlx",
     "claude_review": "claude-sonnet-4-6"
   },
   "model_routing": {

@@ -283,6 +283,20 @@ def evaluate_strategy(
         summary=f"Entry candidates: {entry_summary}. Exit candidates: {exit_summary}.",
     )
 
+    # Rank entries strongest-first so that whoever consumes this list takes the
+    # best candidates rather than the first ones. Guardrails cap buys with
+    # `buy_decisions[:allowance]`, and the universe is alphabetical, so without
+    # this the fallback selection was by ticker name. Claude escalation still
+    # reorders on contested slots when it runs; this makes the path where it
+    # does *not* run principled instead of arbitrary. Sorting is stable, so
+    # equal scores keep their alphabetical order and runs stay deterministic.
+    entry_scores = {
+        candidate.symbol: candidate.score
+        for candidate in candidates
+        if candidate.action == "buy"
+    }
+    entry_decisions.sort(key=lambda decision: -entry_scores.get(decision.symbol, 0.0))
+
     return StrategyEvaluation(
         classification=classification,
         candidates=candidates,

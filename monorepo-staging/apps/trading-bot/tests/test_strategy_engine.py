@@ -363,3 +363,39 @@ class StrategyEngineTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class EntryOrderingTests(unittest.TestCase):
+    """Entries must be ranked by score, not by ticker name.
+
+    Guardrails cap buys with `buy_decisions[:allowance]` and the universe is
+    alphabetical, so unranked entries meant the fallback selection was by name.
+    """
+
+    def _snapshot(self, symbol: str, rsi: float) -> IndicatorSnapshot:
+        # ma_20 above ma_50 confirms the crossover; rsi below the threshold of
+        # 30 makes it oversold. Deeper oversold scores higher.
+        return IndicatorSnapshot(
+            symbol=symbol, current_price=100, ma_20=101, ma_50=99, rsi=rsi,
+        )
+
+    def test_entry_decisions_are_ranked_by_score_not_alphabetically(self) -> None:
+        # AAAA sorts first by name; ZZZZ is more oversold, so it scores higher.
+        strategy = build_strategy()
+        snapshots = [self._snapshot("AAAA", 28.0), self._snapshot("ZZZZ", 12.0)]
+
+        evaluation = evaluate_strategy(strategy, snapshots, [])
+        symbols = [d.symbol for d in evaluation.entry_decisions]
+        scores = {c.symbol: c.score for c in evaluation.candidates if c.action == "buy"}
+
+        self.assertEqual(len(symbols), 2, f"expected both to trigger, got {symbols}")
+        self.assertGreater(scores["ZZZZ"], scores["AAAA"])
+        self.assertEqual(symbols[0], "ZZZZ", "highest score must come first")
+
+    def test_equal_scores_keep_deterministic_alphabetical_order(self) -> None:
+        strategy = build_strategy()
+        snapshots = [self._snapshot("AAAA", 25.0), self._snapshot("BBBB", 25.0)]
+
+        evaluation = evaluate_strategy(strategy, snapshots, [])
+        symbols = [d.symbol for d in evaluation.entry_decisions]
+
+        self.assertEqual(symbols, sorted(symbols), "stable sort must preserve order on ties")

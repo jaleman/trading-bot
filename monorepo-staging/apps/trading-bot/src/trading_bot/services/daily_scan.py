@@ -98,11 +98,64 @@ def run_daily_scan(
         else write_logs
     )
 
+    # Written before any work happens, so an interrupted scan still leaves
+    # evidence that it started and when. Previously every line — including the
+    # start marker — was written only after a successful completion, so a crash
+    # produced no record at all.
+    notes: list[str] = []
+    if effective_write_logs:
+        logger.log_message("=== Staged daily scan started ===")
+
+    try:
+        return _run_daily_scan_body(
+            logger=logger,
+            notes=notes,
+            paths=paths,
+            strategy=strategy,
+            guardrail_store=guardrail_store,
+            guardrail_state=guardrail_state,
+            loaded_env_file=loaded_env_file,
+            effective_write_logs=effective_write_logs,
+            include_broker_context=include_broker_context,
+            include_market_data=include_market_data,
+            include_prefilter=include_prefilter,
+            include_decisions=include_decisions,
+            execute_paper_trades=execute_paper_trades,
+        )
+    except BaseException as exc:
+        if effective_write_logs:
+            # Flush whatever progress was made before the failure, then the
+            # traceback, so the log explains how far the scan got and why it died.
+            logger.log_messages(notes)
+            logger.log_exception(exc, context="Daily scan aborted")
+            logger.log_message("=== Staged daily scan FAILED ===")
+        raise
+
+
+def _run_daily_scan_body(
+    *,
+    logger,
+    notes: list[str],
+    paths,
+    strategy,
+    guardrail_store,
+    guardrail_state,
+    loaded_env_file,
+    effective_write_logs: bool,
+    include_broker_context: bool,
+    include_market_data: bool,
+    include_prefilter: bool,
+    include_decisions: bool,
+    execute_paper_trades: bool,
+) -> DailyScanSummary:
+    """Body of the daily scan, separated so failures can be logged around it."""
+    scan_symbols = []
+
     try:
         scan_symbols = resolve_scan_universe(strategy)
     except UniverseError as exc:
         scan_symbols = list(strategy.watchlist)
-        notes = [
+        notes[:] = [
             "Monorepo trading-bot runtime.",
             f"Using strategy config: {paths.strategy_config}",
             f"Universe resolution failed: {exc}",
@@ -110,7 +163,7 @@ def run_daily_scan(
             f"Configured local analysis model: {strategy.models.monitoring}",
         ]
     else:
-        notes = [
+        notes[:] = [
             "Monorepo trading-bot runtime.",
             f"Using strategy config: {paths.strategy_config}",
             f"Configured universe size: {len(scan_symbols)}",
@@ -140,6 +193,18 @@ def run_daily_scan(
     decisions = []
     order_results = []
 
+    # Preload the local model before the network fetches below. A daily scan
+    # always starts with the model cold, and its load time would otherwise be
+    # charged against the analysis request's own timeout.
+    if include_prefilter and strategy.model_routing.local_analysis_enabled:
+        warm_client = OllamaLocalAnalysisClient(model=strategy.models.local_analysis)
+        if warm_client.warm():
+            notes.append(f"Preloaded local analysis model: {strategy.models.local_analysis}")
+        else:
+            notes.append(
+                "Local analysis model preload failed; the analysis call will absorb model load time."
+            )
+
     if include_broker_context or execute_paper_trades:
         try:
             broker = AlpacaBrokerClient()
@@ -162,6 +227,15 @@ def run_daily_scan(
             notes.append(
                 f"Fetched indicator snapshots for {len(indicator_snapshots)} symbols."
             )
+            # A partial fetch still scans, but must not look like a quiet market.
+            failed_symbols = getattr(client, "last_failed_symbols", None)
+            if isinstance(failed_symbols, list) and failed_symbols:
+                notes.append(
+                    f"Market data degraded: {len(failed_symbols)} of {len(scan_symbols)} "
+                    f"symbol(s) failed and were excluded from this scan "
+                    f"({', '.join(failed_symbols[:10])}"
+                    f"{', ...' if len(failed_symbols) > 10 else ''})."
+                )
         except MarketDataError as exc:
             notes.append(f"Market data disabled: {exc}")
         except Exception as exc:
@@ -355,9 +429,8 @@ def run_daily_scan(
     )
 
     if effective_write_logs:
-        logger.log_message("=== Staged daily scan started ===")
-        for note in notes:
-            logger.log_message(note)
+        # The start marker was already written before any work began.
+        logger.log_messages(notes)
         logger.log_summary_json(summary)
         logger.log_message("=== Staged daily scan complete ===")
 

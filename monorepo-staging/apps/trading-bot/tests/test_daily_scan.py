@@ -131,6 +131,68 @@ class DailyScanGuardrailTests(unittest.TestCase):
 
     @patch("trading_bot.services.daily_scan.ensure_runtime_dirs", side_effect=lambda p: p)
     @patch("trading_bot.services.daily_scan.resolve_paths")
+    def test_daily_scan_logs_evidence_when_it_crashes(self, mock_paths: MagicMock, _mock_dirs: MagicMock) -> None:
+        """A crashed scan previously wrote nothing at all — no start, no error."""
+        self.write_strategy()
+        self.write_guardrail_state()
+        mock_paths.return_value = self.paths
+
+        boom = RuntimeError("broker exploded")
+        with patch("trading_bot.services.daily_scan.resolve_scan_universe", side_effect=boom):
+            with self.assertRaises(RuntimeError):
+                run_daily_scan(include_prefilter=True, write_logs=True)
+
+        content = self.trade_log.read_text(encoding="utf-8")
+        self.assertIn("=== Staged daily scan started ===", content)
+        self.assertIn("UNHANDLED RuntimeError: broker exploded", content)
+        self.assertIn("Daily scan aborted", content)
+        self.assertIn("=== Staged daily scan FAILED ===", content)
+        self.assertIn("Traceback", content)
+
+    @patch("trading_bot.services.daily_scan.ensure_runtime_dirs", side_effect=lambda p: p)
+    @patch("trading_bot.services.daily_scan.resolve_paths")
+    def test_daily_scan_reports_partial_market_data_failure(self, mock_paths: MagicMock, _mock_dirs: MagicMock) -> None:
+        """A degraded fetch must be visible, not silently look like a quiet market."""
+        self.write_strategy(daily_limit=1)
+        self.write_guardrail_state()
+        mock_paths.return_value = self.paths
+
+        fake_market = MagicMock()
+        fake_market.get_all_indicators.return_value = [
+            IndicatorSnapshot(symbol="JPM", current_price=100, ma_20=101, ma_50=99, rsi=25)
+        ]
+        fake_market.last_failed_symbols = ["AAPL", "MSFT"]
+
+        with patch("trading_bot.services.daily_scan.AlpacaMarketDataClient", return_value=fake_market):
+            summary = run_daily_scan(include_prefilter=True, include_decisions=True)
+
+        degraded = [note for note in summary.notes if "Market data degraded" in note]
+        self.assertEqual(len(degraded), 1)
+        self.assertIn("AAPL", degraded[0])
+        self.assertIn("MSFT", degraded[0])
+        # The scan still produces decisions from the symbols that did succeed.
+        self.assertEqual([item.symbol for item in summary.decisions], ["JPM"])
+
+    @patch("trading_bot.services.daily_scan.ensure_runtime_dirs", side_effect=lambda p: p)
+    @patch("trading_bot.services.daily_scan.resolve_paths")
+    def test_daily_scan_omits_degraded_note_when_all_symbols_succeed(self, mock_paths: MagicMock, _mock_dirs: MagicMock) -> None:
+        self.write_strategy(daily_limit=1)
+        self.write_guardrail_state()
+        mock_paths.return_value = self.paths
+
+        fake_market = MagicMock()
+        fake_market.get_all_indicators.return_value = [
+            IndicatorSnapshot(symbol="JPM", current_price=100, ma_20=101, ma_50=99, rsi=25)
+        ]
+        fake_market.last_failed_symbols = []
+
+        with patch("trading_bot.services.daily_scan.AlpacaMarketDataClient", return_value=fake_market):
+            summary = run_daily_scan(include_prefilter=True, include_decisions=True)
+
+        self.assertFalse(any("Market data degraded" in note for note in summary.notes))
+
+    @patch("trading_bot.services.daily_scan.ensure_runtime_dirs", side_effect=lambda p: p)
+    @patch("trading_bot.services.daily_scan.resolve_paths")
     def test_daily_scan_blocks_paper_trade_execution_in_safe_mode(self, mock_paths: MagicMock, _mock_dirs: MagicMock) -> None:
         self.write_strategy(safe_mode=True, paper_enabled=True)
         self.write_guardrail_state()

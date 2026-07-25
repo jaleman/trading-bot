@@ -17,6 +17,49 @@ from trading_bot.models import (
 
 DEFAULT_OLLAMA_URL = "http://localhost:11434/api/generate"
 
+# A realistic scan payload (15 candidates plus open positions and full snapshot
+# fields) measures close to 4,000 prompt tokens, which overflows Ollama's 4,096
+# default. Ollama truncates from the front of the prompt, silently discarding
+# the instructions below, so the window is set explicitly.
+DEFAULT_NUM_CTX = 8192
+
+# Holds the model resident long enough for the scan's broker and market-data
+# fetches to complete between the warm call and the analysis call.
+DEFAULT_KEEP_ALIVE = "10m"
+
+# Constrains decoding so the response is always a valid instance of this shape,
+# rather than prose or fenced markdown that has to be scraped for braces.
+LOCAL_ANALYSIS_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "summary": {"type": "string"},
+        "ranked_candidates": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "symbol": {"type": "string"},
+                    "action": {
+                        "type": "string",
+                        "enum": ["buy", "sell", "watch", "hold", "skip"],
+                    },
+                    "summary": {"type": "string"},
+                    "confidence": {"type": "number"},
+                },
+                "required": ["symbol", "action", "summary", "confidence"],
+            },
+        },
+        "escalate_to_claude": {"type": "boolean"},
+        "escalation_reason": {"type": "string"},
+    },
+    "required": [
+        "summary",
+        "ranked_candidates",
+        "escalate_to_claude",
+        "escalation_reason",
+    ],
+}
+
 LOCAL_ANALYSIS_PROMPT = """You are a local market-analysis assistant for a swing trading bot.
 
 You will receive a shortlist of deterministic trading candidates that has already been filtered by code.
@@ -56,9 +99,41 @@ class LocalAnalysisError(RuntimeError):
 class OllamaLocalAnalysisClient:
     """Local Ollama analysis adapter for ranked deterministic candidates."""
 
-    def __init__(self, model: str, url: str = DEFAULT_OLLAMA_URL) -> None:
+    def __init__(
+        self,
+        model: str,
+        url: str = DEFAULT_OLLAMA_URL,
+        num_ctx: int = DEFAULT_NUM_CTX,
+        keep_alive: str = DEFAULT_KEEP_ALIVE,
+    ) -> None:
         self.model = model
         self.url = url
+        self.num_ctx = num_ctx
+        self.keep_alive = keep_alive
+
+    def warm(self, timeout: int = 180) -> bool:
+        """Preload the model so its load time is not charged to the analysis call.
+
+        A cold Ollama load of a multi-gigabyte model can take longer than the
+        analysis request timeout on its own, which is a real risk for a
+        once-daily scan that always starts cold. Best-effort: failures here are
+        not fatal, the analysis call simply pays the load cost as before.
+        """
+        try:
+            response = requests.post(
+                self.url,
+                json={
+                    "model": self.model,
+                    "keep_alive": self.keep_alive,
+                    "options": {"num_ctx": self.num_ctx},
+                },
+                timeout=timeout,
+            )
+            response.raise_for_status()
+        except Exception:
+            return False
+
+        return True
 
     def analyze(
         self,
@@ -104,8 +179,16 @@ class OllamaLocalAnalysisClient:
                 "model": self.model,
                 "prompt": prompt,
                 "stream": False,
+                # Gemma-class models spend hidden reasoning tokens before
+                # emitting any output, which dominated the response time and
+                # can consume an entire num_predict budget before the first
+                # brace is written.
+                "think": False,
+                "format": LOCAL_ANALYSIS_SCHEMA,
+                "keep_alive": self.keep_alive,
+                "options": {"num_ctx": self.num_ctx},
             },
-            timeout=60,
+            timeout=90,
         )
         response.raise_for_status()
 
