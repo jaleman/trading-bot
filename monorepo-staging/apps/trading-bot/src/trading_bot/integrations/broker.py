@@ -100,15 +100,29 @@ class AlpacaBrokerClient:
             status=str(order.status),
         )
 
-    def get_trade_history(self, limit: int = 20) -> list[TradeHistoryEntry]:
-        orders = self.client.get_orders()
-        return [
+    def get_trade_history(self, limit: int = 100) -> list[TradeHistoryEntry]:
+        """Return order history, most recently filled first.
+
+        Alpaca's `get_orders()` defaults to *open* orders only. Without an
+        explicit status filter this returned nothing at all once orders had
+        filled and closed, which is every order that ever mattered.
+        """
+        request = GetOrdersRequest(status=QueryOrderStatus.ALL, limit=limit)
+        orders = list(self.client.get_orders(filter=request))
+
+        entries = [
             TradeHistoryEntry(
                 symbol=order.symbol,
                 qty=float(order.qty) if order.qty else 0,
-                side=str(order.side),
-                status=str(order.status),
+                side=str(order.side).split(".")[-1],
+                status=str(order.status).split(".")[-1],
                 filled_avg_price=float(order.filled_avg_price) if order.filled_avg_price else 0,
+                id=str(order.id),
+                filled_qty=float(order.filled_qty) if order.filled_qty else 0,
+                submitted_at=str(order.submitted_at) if order.submitted_at else "",
+                filled_at=str(order.filled_at) if order.filled_at else "",
             )
-            for order in list(orders)[:limit]
+            for order in orders
         ]
+        entries.sort(key=lambda e: e.filled_at or e.submitted_at, reverse=True)
+        return entries[:limit]

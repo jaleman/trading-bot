@@ -175,6 +175,12 @@ class TradeHistoryEntry:
     side: str
     status: str
     filled_avg_price: float
+    # Reconciliation needs to match a broker fill back to the order the bot
+    # believed it placed, and to order round trips chronologically.
+    id: str = ""
+    filled_qty: float = 0.0
+    submitted_at: str = ""
+    filled_at: str = ""
 
 
 @dataclass(frozen=True)
