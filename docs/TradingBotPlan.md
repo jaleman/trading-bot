@@ -253,6 +253,15 @@ The tracked example config remains the template for local operator files.
 
 *Last updated: March 10, 2026 — Monorepo cutover complete, paper-trade validation active*
 
+> **Partially deprecated (2026-07-25).** The "paper-trade validation active"
+> framing above is no longer true — the daily scan last ran 2026-04-24 and the
+> project was dormant until 2026-07-25. Two entries in the list below are now
+> false rather than merely dated: OpenClaw is **not** installed or running as a
+> background service on this host, and the Ollama model is **not** `qwen2.5:7b`
+> (the only installed model is `gemma4:e4b-mlx`, which the trading app is now
+> configured to use). The remaining completed items still hold. Current
+> ground truth lives in `todo.md`.
+
 **Completed:**
 - Mac Mini M4 purchased and designated as trading machine
 - macOS, Python 3.14, Node 22, VS Code, Git installed

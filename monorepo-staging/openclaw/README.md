@@ -23,6 +23,13 @@ This folder holds the monorepo-managed version of the OpenClaw-facing runtime ar
 
 ## Current Status
 
+> **Deprecated (2026-07-25) — this section describes March 2026, not today.**
+> Every "live" claim below is stale: OpenClaw is not installed on the current
+> host (no `~/.openclaw/`, no scheduled job, nothing deployed), the daily scan
+> has not run since 2026-04-24, and `qwen2.5:7b` is no longer installed in
+> Ollama. Treat the list as a record of the March cutover. Whether OpenClaw is
+> redeployed at all is an open question — see Phase 3 in `todo.md`.
+
 - controlled cutover completed on March 8, 2026
 - approved workspace files from this folder were deployed into `~/.openclaw/workspace/`
 - the live trading job now points at the wrapper-script flow under `~/trading-bot/monorepo-staging/`
@@ -73,6 +80,14 @@ The trading-bot app under `apps/trading-bot/` owns:
 - runtime summaries and logs
 
 ## Model Boundary
+
+> **Deprecated (2026-07-25).** Two of the three lines below are stale.
+> `qwen2.5:7b` is no longer installed in Ollama, and OpenClaw itself is not
+> installed on the current host. The local analysis path now runs
+> `gemma4:e4b-mlx` (see `apps/trading-bot/config/strategy.local.json`). The
+> operator-chat line is left unchanged rather than repointed, because the
+> agent-harness decision is still open — see Phase 3 in `todo.md`. Only the
+> Claude decision-path boundary below is still accurate.
 
 - default OpenClaw operator chat: `ollama/qwen2.5:7b`
 - explicit trading decision path inside the Python runtime: Anthropic/Claude

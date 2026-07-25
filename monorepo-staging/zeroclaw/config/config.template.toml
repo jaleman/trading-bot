@@ -1,0 +1,110 @@
+# ZeroClaw configuration — repository-managed source of truth.
+#
+# Deployed to /opt/homebrew/var/zeroclaw/config.toml by
+# scripts/sync_zeroclaw_config.sh. Edit here, never there: the deployed file
+# is runtime state, this file is the contract.
+#
+# SECRETS ARE NOT STORED HERE. Channel tokens are set on the deployed config
+# via `zeroclaw config set` (masked input) and are preserved across syncs by
+# the sync script, which backs up the live config before writing.
+#
+# The repo-root placeholder below (double-underscore REPO_ROOT) is replaced
+# at sync time with the absolute path of the trading-bot checkout.
+
+schema_version = 3
+
+[agents]
+
+# Single operator agent. Named rather than default so additional agents can be
+# added later without ambiguity about which one owns the trading contract.
+[agents.tradingbot]
+risk_profile = "tradingbot"
+model_provider = "ollama.default"
+acp_enable_mcp = false
+delegate_same_risk_profile = true
+enabled = true
+# Without this the /bot skill installs but is never loaded, and the model
+# answers operator questions from its own knowledge instead of running the
+# wrapper scripts -- which is exactly the improvisation this design exists
+# to prevent.
+skill_bundles = ["tradingbot"]
+
+[skill_bundles.tradingbot]
+dir = "shared/skills/tradingbot"
+
+[agents.tradingbot.a2a]
+published = false
+
+[agents.tradingbot.identity]
+# OpenClaw-compatible identity format, which is why the persona files under
+# openclaw/workspace/ (SOUL.md, AGENTS.md, ...) port across unchanged.
+format = "openclaw"
+
+[agents.tradingbot.memory]
+backend = "sqlite"
+
+[agents.tradingbot.precheck]
+enabled = true
+timeout_secs = 5
+
+[agents.tradingbot.workspace]
+unrestricted_filesystem = false
+
+# NOTE: channel sections are intentionally absent from this template.
+#
+# ZeroClaw requires `bot_token` on `[channels.telegram.default]`, so the
+# section cannot be valid without a secret -- and secrets must not live in the
+# repo. Channels are therefore *runtime-only* config: created once against the
+# deployed file with masked input, and PRESERVED across syncs by
+# scripts/sync_zeroclaw_config.sh rather than overwritten.
+#
+# To add the operator channel (one time):
+#   zeroclaw config set channels.telegram.default.bot_token   # masked input
+#   zeroclaw channel bind-telegram <your-telegram-username>
+#
+# Verify with: zeroclaw channel doctor
+
+# Local model keeps the runtime off paid inference. The trading app calls
+# Claude separately for escalation only, under its own daily call cap.
+[providers.models.ollama.default]
+model = "gemma4:e4b-mlx"
+base_url = "http://localhost:11434"
+
+# Gemma 4 is a reasoning model: left alone it spends its entire output budget
+# on hidden chain-of-thought and emits nothing visible, which surfaced here as
+# "I couldn't produce a visible reply for that message" and, in the trading
+# app, as an empty JSON response. The same fix applies in both places.
+think = false
+
+# Ollama defaults num_ctx to 4096. An agent turn carries a system prompt, tool
+# specs, skill definitions and conversation history, so 4096 truncates -- and
+# Ollama truncates from the FRONT, discarding the instructions. The model
+# itself supports 128K.
+num_ctx = 16384
+
+# Operator replies are short. Capping output keeps latency down; a /bot
+# command routes to a shell script rather than needing an essay.
+num_predict = 1024
+temperature = 0.2
+
+# Deny-by-default. The agent may run only the repo's own wrapper scripts, and
+# only inside the trading-bot tree. Adding a capability means adding a script
+# here deliberately, which is the point.
+[risk_profiles.tradingbot]
+level = "supervised"
+block_high_risk_commands = true
+allowed_roots = ["__REPO_ROOT__"]
+allowed_commands = [
+  "__REPO_ROOT__/monorepo-staging/scripts/run_trading_bot_rehearsal.sh",
+  "__REPO_ROOT__/monorepo-staging/scripts/print_trading_bot_operator_summary.sh",
+  "__REPO_ROOT__/monorepo-staging/scripts/print_trading_bot_runtime_status.sh",
+  "__REPO_ROOT__/monorepo-staging/scripts/print_trading_bot_balance.sh",
+  "__REPO_ROOT__/monorepo-staging/scripts/print_trading_bot_holdings.sh",
+  "__REPO_ROOT__/monorepo-staging/scripts/print_trading_bot_pending_orders.sh",
+  "__REPO_ROOT__/monorepo-staging/scripts/print_trading_bot_stock_info.sh",
+  "__REPO_ROOT__/monorepo-staging/scripts/print_trading_bot_supported_commands.sh",
+  "__REPO_ROOT__/monorepo-staging/scripts/run_trading_bot_telegram_command.sh",
+  "__REPO_ROOT__/monorepo-staging/scripts/run_trading_bot_reconciliation.sh",
+  "__REPO_ROOT__/monorepo-staging/scripts/run_trading_bot_read_model.sh",
+  "__REPO_ROOT__/monorepo-staging/scripts/run_trading_bot_log_maintenance.sh",
+]

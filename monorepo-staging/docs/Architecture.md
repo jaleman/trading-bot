@@ -42,6 +42,15 @@ For Telegram operator commands, the live path is also wrapper-based:
 
 For operator chat and general Telegram questions, the live OpenClaw default model is now `ollama/qwen2.5:7b`.
 
+> **Deprecated (2026-07-25).** The statement above described the March 2026
+> deployment and is no longer accurate. OpenClaw is not installed on the
+> current host (no `~/.openclaw/`, no scheduled job), and `qwen2.5:7b` is not
+> installed in Ollama — the only local model present is `gemma4:e4b-mlx`.
+> The operator-chat model is deliberately *not* being repointed, because the
+> agent-harness decision (OpenClaw vs. a lighter alternative) is still open;
+> see the Phase 3 entry in `todo.md`. Note this is the operator-chat role,
+> which is separate from the trading app's local-analysis model.
+
 Claude remains part of the overall system, but only as an explicitly retained provider for trading-bot decision paths and possible escalation scenarios rather than the default operator conversation path.
 
 ## System Layers
@@ -57,7 +66,9 @@ Responsibilities:
 - workspace behavior and operator instructions
 - native `/bot` command registration and deterministic operator command routing
 - top-level runtime identity for the bot session
-- default operator chat model routing via local Ollama/qwen
+- default operator chat model routing via local Ollama/qwen *(deprecated
+  2026-07-25: `qwen2.5:7b` is no longer installed; see the deprecation note
+  in the operator-chat section above)*
 
 Key staged sources:
 - `openclaw/workspace/AGENTS.md`
