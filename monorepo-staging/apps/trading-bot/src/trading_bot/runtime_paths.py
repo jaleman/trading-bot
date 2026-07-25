@@ -16,6 +16,9 @@ class AppPaths:
     guardrail_state: Path
     env_file: Path | None
     strategy_config: Path
+    # Operator activity is kept separate from the scan log so that frequent
+    # /bot commands do not drown the daily trading narrative.
+    operator_log: Path = Path("operator.log")
 
 
 def _resolve_input_path(path: str | Path) -> Path:
@@ -63,6 +66,7 @@ def resolve_paths(
         guardrail_state=guardrail_state,
         env_file=resolved_env_file,
         strategy_config=strategy_config,
+        operator_log=logs_dir / "operator.log",
     )
 
 

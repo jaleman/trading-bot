@@ -302,10 +302,59 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _operator_logger():
+    """Logger for operator activity, or None if the runtime is unavailable.
+
+    Built once per invocation so the whole command shares a single run ID and
+    its start/outcome lines can be correlated.
+    """
+    try:
+        from trading_bot.persistence.trade_log import TradeLogger
+        from trading_bot.runtime_paths import ensure_runtime_dirs, resolve_paths
+
+        paths = ensure_runtime_dirs(resolve_paths())
+        return TradeLogger(paths.operator_log)
+    except Exception:
+        return None
+
+
+def log_operator_activity(logger, command: str, status: str, detail: str = "") -> None:
+    """Record one operator command event.
+
+    Best-effort by design: a logging failure must never break the operator
+    command the user is actually running. Only the command name and outcome
+    are recorded -- never env file contents or credentials.
+    """
+    if logger is None:
+        return
+    try:
+        suffix = f" — {detail}" if detail else ""
+        logger.log_message(f"operator command '{command}' {status}{suffix}")
+    except Exception:
+        return
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = build_parser()
     args = parser.parse_args(argv)
+    command = getattr(args, "command", "unknown")
 
+    logger = _operator_logger()
+    log_operator_activity(logger, command, "invoked")
+
+    try:
+        _dispatch(args)
+    except SystemExit as exc:
+        log_operator_activity(logger, command, "failed", str(exc))
+        raise
+    except BaseException as exc:
+        log_operator_activity(logger, command, "failed", f"{type(exc).__name__}: {exc}")
+        raise
+    else:
+        log_operator_activity(logger, command, "completed")
+
+
+def _dispatch(args) -> None:
     try:
         if args.command == "summary":
             print(format_latest_summary(args.jsonl_path))

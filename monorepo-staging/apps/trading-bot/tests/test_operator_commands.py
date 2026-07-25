@@ -12,6 +12,8 @@ from unittest.mock import MagicMock, patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from trading_bot.integrations.broker import BrokerError  # noqa: E402
+from trading_bot import operator_commands  # noqa: E402
+from trading_bot.persistence.trade_log import TradeLogger  # noqa: E402
 from trading_bot.models import IndicatorSnapshot  # noqa: E402
 from trading_bot.models import AccountSnapshot, OrderResult, PositionSnapshot  # noqa: E402
 from trading_bot.operator_commands import format_balance, format_holdings, format_latest_summary, format_pending_orders, format_runtime_status, format_stock_info, format_supported_commands  # noqa: E402
@@ -296,3 +298,53 @@ class OperatorCommandsTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class OperatorActivityLoggingTests(unittest.TestCase):
+    """Operator commands were previously unrecorded entirely."""
+
+    def _run_with_temp_runtime(self, argv, dispatch_side_effect=None):
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "logs" / "operator.log"
+            fake_logger = TradeLogger(log_path, run_id="run-op")
+
+            with patch("trading_bot.operator_commands._operator_logger", return_value=fake_logger), \
+                 patch("trading_bot.operator_commands._dispatch", side_effect=dispatch_side_effect):
+                try:
+                    operator_commands.main(argv)
+                except SystemExit:
+                    pass
+            return log_path.read_text(encoding="utf-8") if log_path.exists() else ""
+
+    def test_successful_command_logs_invoked_and_completed(self) -> None:
+        content = self._run_with_temp_runtime(["balance"])
+        self.assertIn("operator command 'balance' invoked", content)
+        self.assertIn("operator command 'balance' completed", content)
+
+    def test_failed_command_records_the_failure(self) -> None:
+        content = self._run_with_temp_runtime(
+            ["balance"], dispatch_side_effect=SystemExit("broker unreachable")
+        )
+        self.assertIn("operator command 'balance' invoked", content)
+        self.assertIn("failed", content)
+        self.assertIn("broker unreachable", content)
+        self.assertNotIn("completed", content)
+
+    def test_all_lines_of_one_command_share_a_run_id(self) -> None:
+        content = self._run_with_temp_runtime(["balance"])
+        run_ids = {line.split("]")[1].strip(" [") for line in content.strip().splitlines()}
+        self.assertEqual(len(run_ids), 1, f"expected one run id, saw {run_ids}")
+
+    def test_logging_failure_never_breaks_the_command(self) -> None:
+        """A broken log must not stop the operator getting their answer."""
+        broken = MagicMock()
+        broken.log_message.side_effect = OSError("disk full")
+        with patch("trading_bot.operator_commands._operator_logger", return_value=broken), \
+             patch("trading_bot.operator_commands._dispatch") as dispatch:
+            operator_commands.main(["balance"])
+        dispatch.assert_called_once()
+
+    def test_unavailable_runtime_is_tolerated(self) -> None:
+        with patch("trading_bot.operator_commands._operator_logger", return_value=None), \
+             patch("trading_bot.operator_commands._dispatch") as dispatch:
+            operator_commands.main(["balance"])
+        dispatch.assert_called_once()
