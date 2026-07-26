@@ -109,6 +109,7 @@ level = "supervised"
 block_high_risk_commands = true
 allowed_roots = ["__REPO_ROOT__"]
 allowed_commands = [
+  "__REPO_ROOT__/monorepo-staging/scripts/run_trading_bot_daily.sh",
   "__REPO_ROOT__/monorepo-staging/scripts/run_trading_bot_rehearsal.sh",
   "__REPO_ROOT__/monorepo-staging/scripts/print_trading_bot_operator_summary.sh",
   "__REPO_ROOT__/monorepo-staging/scripts/print_trading_bot_runtime_status.sh",

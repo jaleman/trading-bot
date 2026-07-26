@@ -7,12 +7,21 @@ Repository-managed definition of the scheduled trading scan. Applied with
 
 ```
 zeroclaw cron add '35 9 * * 1-5' \
-  '<REPO_ROOT>/monorepo-staging/scripts/run_trading_bot_rehearsal.sh' \
+  '<REPO_ROOT>/monorepo-staging/scripts/run_trading_bot_daily.sh' \
   --agent tradingbot \
   --tz America/Detroit
 ```
 
 Weekdays at 09:35 America/Detroit, five minutes after the US market opens.
+
+`run_trading_bot_daily.sh` is the complete flow: run the scan, then report
+the outcome to Telegram via `zeroclaw channel send`. On failure it sends the
+error and exits non-zero, so the scheduler records a failure too. **Silence is
+never the success signal** — a scan that dies says so.
+
+Verified 2026-07-25: `channel send` delivers in ~1s adding zero runtime-trace
+events and no model calls, so reporting has no agent in the path. Both the
+success and failure paths were exercised with `--dry-run`.
 
 ## Why the command is bare
 
