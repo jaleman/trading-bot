@@ -10,8 +10,31 @@ Updated: 2026-07-25 (Phase 0/1 reassessment session — see WORKFLOW.md)
 - **Current milestone**: harden reliability (Ollama timeout margin, market
   data adapter retries) and decide the OpenClaw-vs-lighter-harness question
   before redeploying and restarting the 90-day clock.
-- **Next action**: Phase 1.5 — SQLite read model, operator-command logging,
-  retention/backup, Alpaca reconciliation. Then Phase 2 alerting.
+- **Next action (2026-07-26): step 5 — supervised rehearsal, then activate.**
+  Steps 1–4 of the agreed plan are complete and pushed. What remains:
+
+  1. Run a supervised end-to-end rehearsal (`run_trading_bot_daily.sh`) and
+     confirm the Telegram summary arrives.
+  2. Apply the three cron jobs together — scan 09:35, watchdog 11:00, Drive
+     backup 10:15 — via `sync_zeroclaw_config.sh --with-cron` plus the two
+     companion jobs in `zeroclaw/cron/trading-bot-daily-scan.md`.
+  3. Record the clock-start date and baseline portfolio value so
+     `gate_metrics` measures the right window. Note the first run closes PFE
+     and COST on the stop rule, so day one shows two realised losses from the
+     dormancy cleanup rather than from the strategy.
+  4. Then steps 6–7: the strategy plug-in interface, and the shadow advisor.
+
+### Harness hardening complete (2026-07-25/26)
+- Scheduling, crash recovery, staleness reporting: ZeroClaw, all verified
+- Daily summary out: agent-free `channel send`, ~1s, zero trace events
+- Failure alerting: scan failures send the traceback and exit non-zero
+- `/bot` commands in: dedicated poller, sub-second, deny-by-default
+- Kill switch: repaired and tested, 1s stop / 6s restore
+- No-margin, long-only: enforced at the broker *and* in code
+- Staleness watchdog: counts missed trading weekdays
+- **Mac sleep was set to 1 minute**, held awake only by a "display is on"
+  assertion — turning the monitor off would have stopped the scan. Now
+  `pmset sleep 0`.
 
 ## Phase 1.5 — Audit-grade logging (added 2026-07-25)
 
