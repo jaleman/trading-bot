@@ -478,6 +478,27 @@ is skipped as "no data" rather than counted as a failure — correct, but it
 means the live run did not exercise the isolation path; unit tests and the
 outage simulation cover that.
 
+## DEFERRED: same-scan capital recycling (2026-07-25)
+
+`build_order_results` does not credit sell proceeds to a buy in the same
+scan, on the grounds that a submitted sale is not a settled one. Accepted as
+the conservative default; **revisit once there is data.**
+
+The cost, if any, is a freed slot sitting idle for one scan after an exit.
+That is now measurable — once daily scans resume, the read model can answer
+it directly:
+
+```sql
+-- scans that sold, and whether the freed slot was used the next day
+SELECT r.timestamp, r.position_count, r.decision_count, r.order_count
+FROM runs r ORDER BY r.timestamp;
+```
+
+If exits are rare, this costs essentially nothing and should stay as is. If
+the strategy churns and slots idle regularly, the fix is to credit proceeds
+once Alpaca reports the sale settled rather than at submission — not to
+spend unsettled cash.
+
 ## Decision: open positions (2026-07-25)
 
 **Let the bot's own exit logic close the stale positions on first resumed
