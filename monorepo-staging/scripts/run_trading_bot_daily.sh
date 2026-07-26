@@ -15,8 +15,17 @@ set -uo pipefail
 #
 # A failing scan reports the failure. Silence is never the success signal.
 #
+# This script PLACES PAPER ORDERS. The scan is invoked with
+# --execute-paper-trades, without which `daily_scan` runs every analysis stage
+# and then returns with an empty `order_results` -- the execution branch, the
+# trade-limit guardrail, the position-size check and the execution-intent
+# firewall all sit behind that flag. Until 2026-07-26 this script omitted it,
+# so the scheduled job would have decided to sell and never sold, while still
+# reporting a healthy scan every morning.
+#
 # Usage: run_trading_bot_daily.sh [--dry-run]
-#   --dry-run  run the scan and print what would be sent, sending nothing
+#   --dry-run  scan only: places no orders and sends nothing, printing the
+#              summary that would have been delivered
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 MONOREPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -58,8 +67,15 @@ notify() {
 }
 
 STARTED="$(date '+%Y-%m-%d %H:%M:%S')"
-SCAN_OUTPUT="$("$SCRIPT_DIR/run_trading_bot_rehearsal.sh" 2>&1)"
-SCAN_STATUS=$?
+if [[ "$DRY_RUN" == "1" ]]; then
+	# --dry-run suppresses execution as well as delivery. A flag by that name
+	# that still placed real orders would be a trap worth avoiding.
+	SCAN_OUTPUT="$("$SCRIPT_DIR/run_trading_bot_rehearsal.sh" 2>&1)"
+	SCAN_STATUS=$?
+else
+	SCAN_OUTPUT="$("$SCRIPT_DIR/run_trading_bot_rehearsal.sh" --execute-paper-trades 2>&1)"
+	SCAN_STATUS=$?
+fi
 
 if [[ $SCAN_STATUS -ne 0 ]]; then
 	# Last few lines carry the traceback tail; the full record is in trades.log.
