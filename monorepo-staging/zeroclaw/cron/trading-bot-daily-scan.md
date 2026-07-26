@@ -44,6 +44,29 @@ configured (`zeroclaw channel`), routed at
 to `runtime/trading-bot/logs/` as usual and reporting is pull-based via
 `/bot` equivalents run locally.
 
+## Companion job: daily off-machine backup
+
+Decided 2026-07-25. Once daily scans resume, `trades.jsonl` grows every day
+but the Google Drive copy only updates when run by hand, so the only
+off-machine copy of the 90-day gate evidence silently drifts behind. A second
+scheduled job removes that failure mode:
+
+```
+zeroclaw cron add '15 10 * * 1-5' \
+  '<REPO_ROOT>/monorepo-staging/scripts/run_trading_bot_log_maintenance.sh backup /Users/labanlaro/Library/CloudStorage/GoogleDrive-whatiskali@gmail.com/My Drive/trading-bot-backup' \
+  --agent tradingbot \
+  --tz America/Detroit
+```
+
+Runs at 10:15, after the 09:35 scan has completed. This is a local file copy
+into a synced folder — Drive handles the upload — so it introduces no new
+outbound path. The backup's size guard still refuses to overwrite a larger
+backup with a smaller source, so a corrupted local log cannot destroy the
+good copy.
+
+The script must be added to `allowed_commands` in the risk profile before
+this job can be scheduled.
+
 ## Status
 
 **NOT YET ACTIVE.** Deliberately not scheduled until the guardrails drift
