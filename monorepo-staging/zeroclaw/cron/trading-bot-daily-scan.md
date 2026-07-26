@@ -71,10 +71,23 @@ scheduled job removes that failure mode:
 
 ```
 zeroclaw cron add '15 10 * * 1-5' \
-  '<REPO_ROOT>/monorepo-staging/scripts/run_trading_bot_log_maintenance.sh backup /Users/labanlaro/Library/CloudStorage/GoogleDrive-whatiskali@gmail.com/My Drive/trading-bot-backup' \
+  '<REPO_ROOT>/monorepo-staging/scripts/run_trading_bot_log_maintenance.sh backup' \
   --agent tradingbot \
   --tz America/Detroit
 ```
+
+**The destination is not on the command line, deliberately.** It comes from
+`TRADING_BOT_BACKUP_DEST` in the app's gitignored `.env`. The Google Drive
+path contains a space (`My Drive`) and **ZeroClaw does not tokenise like a
+shell** — it split the path into two arguments, and quoting it did not help.
+Both forms were tested as one-shot jobs on 2026-07-26 and both failed with
+`unrecognized arguments: Drive/trading-bot-backup`, meaning this job would
+have errored on every single run. Keeping paths out of scheduled commands
+avoids the whole class.
+
+Verified through the scheduler, not just by hand: a copy was deleted from the
+Drive folder, a one-shot fired, and the scheduler restored it within ten
+seconds.
 
 Runs at 10:15, after the 09:45 scan has completed. This is a local file copy
 into a synced folder — Drive handles the upload — so it introduces no new

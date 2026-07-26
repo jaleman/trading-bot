@@ -237,12 +237,56 @@ The cron doc claimed `run_trading_bot_log_maintenance.sh` had to be added to
 `run_trading_bot_watchdog.sh` are **already allowlisted** in
 `config.template.toml`; no risk-profile change is needed.
 
+### 4. The backup job would have failed every single run
+
+Found by firing it as a one-shot instead of trusting it. **ZeroClaw does not
+tokenise like a shell.** The Drive path contains a space (`My Drive`), so the
+scheduler split it into two arguments and argparse rejected the remainder:
+
+```
+error: unrecognized arguments: Drive/trading-bot-backup
+```
+
+Quoting the path inside the command string does not help — tested separately,
+same failure. It does at least fail loudly rather than backing up to a wrong
+directory, but the 10:15 job would have errored daily while the scan and
+watchdog looked fine.
+
+Fixed by taking the path off the command line entirely:
+`run_trading_bot_log_maintenance.sh backup` with no argument now resolves
+`TRADING_BOT_BACKUP_DEST` from the environment or the app's gitignored
+`.env` — the same grep-don't-source pattern `run_trading_bot_daily.sh`
+already uses for the Telegram recipient. The explicit-destination form still
+works for manual runs.
+
+**Verified through the scheduler**, not by hand: a file was deleted from the
+Drive folder, a one-shot fired, and the scheduler restored it in ~10s.
+
+General lesson worth keeping: **do not put paths in scheduled commands.**
+
+### Applied 2026-07-26 — three jobs live
+
+```
+45 9 * * 1-5   run_trading_bot_daily.sh
+15 10 * * 1-5  run_trading_bot_log_maintenance.sh backup
+0 11 * * 1-5   run_trading_bot_watchdog.sh
+```
+
+All `America/Detroit`, next fire Monday 2026-07-27. `zeroclaw doctor`: 25 ok,
+4 warnings, 0 errors — heartbeat fresh, scheduler healthy. The warnings are
+`SOUL.md`/`AGENTS.md` absent (checklist item 2, and no agent is in the
+execution path), a memory-search setting irrelevant here, and no channel
+components tracked since restart.
+
+Note `zeroclaw cron` uses **`remove`**, not `delete`; `delete` fails with a
+usage error that is easy to mistake for success, which briefly left two 10:15
+jobs registered at once.
+
 ### Remaining rough edge
 
-`--with-cron` applies only the scan. The backup (10:15) and watchdog (11:00)
-jobs still have to be added by hand from
-`zeroclaw/cron/trading-bot-daily-scan.md`. Worth folding into the script so
-"apply the three together" is one command that cannot half-succeed.
+`--with-cron` applies only the scan. The backup and watchdog are still added
+by hand from `zeroclaw/cron/trading-bot-daily-scan.md`. Worth folding into the
+script so "apply the three together" is one command that cannot half-succeed.
 
 ## Step 7 design note — shadow advisor decision capture (2026-07-26)
 
