@@ -114,4 +114,5 @@ allowed_commands = [
   "__REPO_ROOT__/monorepo-staging/scripts/run_trading_bot_reconciliation.sh",
   "__REPO_ROOT__/monorepo-staging/scripts/run_trading_bot_read_model.sh",
   "__REPO_ROOT__/monorepo-staging/scripts/run_trading_bot_log_maintenance.sh",
+  "__REPO_ROOT__/monorepo-staging/scripts/run_trading_bot_watchdog.sh",
 ]

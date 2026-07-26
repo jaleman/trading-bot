@@ -76,12 +76,36 @@ good copy.
 The script must be added to `allowed_commands` in the risk profile before
 this job can be scheduled.
 
+## Companion job: staleness watchdog
+
+The scan reports what happened. Nothing reported what *failed* to happen, and
+that is the defect behind the 2026-04-24 to 2026-07-25 silence: a stopped scan
+writes no logs, raises no errors and sends no messages, so absence looked
+exactly like a quiet market.
+
+```
+zeroclaw cron add '0 11 * * 1-5' \
+  '<REPO_ROOT>/monorepo-staging/scripts/run_trading_bot_watchdog.sh' \
+  --agent tradingbot \
+  --tz America/Detroit
+```
+
+Runs at 11:00, well after the 09:35 scan. It counts missed *trading weekdays*
+rather than elapsed hours -- an earlier version asked "is today a weekday" and
+consequently reported a 92-day-old scan as healthy simply because the check
+ran on a Saturday, staying silent through precisely the outage it exists to
+catch.
+
+Note this shares the ZeroClaw scheduler with the scan, so it cannot report
+ZeroClaw itself being down. That gap is covered by the absence of the daily
+summary: no message by 09:40 on a weekday is itself the signal.
+
 ## Status
 
-**NOT YET ACTIVE.** Deliberately not scheduled until the guardrails drift
-audit (`docs/Security.md` vs `services/guardrails.py`) has been completed —
-that audit has not been re-run since the 2026-03-09 refactor, and it is the
-last unverified safety claim before paper trading resumes.
+**NOT YET ACTIVE.** The guardrails drift audit that previously gated this is
+complete (see `docs/SecurityAudit-2026-07-25.md`) and the kill switch it found
+broken has been repaired and tested. Remaining before activation is a
+supervised end-to-end rehearsal, then applying these three jobs together.
 
 The first active run will close PFE and COST on the stop-loss rule; LIN and
 NEE remain open. See the position decision in `todo.md`.
