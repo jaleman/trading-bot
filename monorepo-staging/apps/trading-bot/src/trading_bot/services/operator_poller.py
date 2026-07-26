@@ -186,7 +186,8 @@ def build_config(env_file: Path | None = None) -> PollerConfig:
     if not operator:
         raise PollerConfigError("TRADING_BOT_TELEGRAM_RECIPIENT is not set.")
 
-    router = paths.repo_root / "monorepo-staging" / "scripts" / "run_trading_bot_telegram_command.sh"
+    # repo_root is the monorepo root (…/monorepo-staging), not the git root.
+    router = paths.repo_root / "scripts" / "run_trading_bot_telegram_command.sh"
     if not router.exists():
         raise PollerConfigError(f"Router script not found: {router}")
 

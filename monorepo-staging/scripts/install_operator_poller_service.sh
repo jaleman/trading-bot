@@ -48,6 +48,14 @@ cat > "$PLIST" <<PLIST_EOF
 	<true/>
 	<key>KeepAlive</key>
 	<true/>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<!-- Without this Python buffers stdout when not on a terminal and the
+		     service logs nothing at all, which is indistinguishable from a
+		     service that is not running. -->
+		<key>PYTHONUNBUFFERED</key>
+		<string>1</string>
+	</dict>
 	<key>StandardOutPath</key>
 	<string>$LOG_DIR/operator-poller.log</string>
 	<key>StandardErrorPath</key>
@@ -68,12 +76,16 @@ fi
 
 launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
 launchctl bootstrap "gui/$(id -u)" "$PLIST"
-sleep 2
+sleep 4
 
-if launchctl list | grep -q "$LABEL"; then
+# Check for a live process rather than presence in `launchctl list`: a crashed
+# service still appears there with its last exit status, so the listing alone
+# cannot distinguish running from crash-looping.
+if pgrep -f "trading_bot.services.operator_poller" >/dev/null 2>&1; then
 	echo "Started $LABEL"
 	echo "Logs: $LOG_DIR/operator-poller.log"
 else
 	echo "Service did not start; check $LOG_DIR/operator-poller.log" >&2
+	tail -5 "$LOG_DIR/operator-poller.log" 2>/dev/null >&2 || true
 	exit 1
 fi

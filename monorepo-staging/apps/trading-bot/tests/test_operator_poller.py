@@ -142,5 +142,31 @@ class OffsetTests(unittest.TestCase):
             self.assertEqual(load_offset(state), 0)
 
 
+class ConfigResolutionTests(unittest.TestCase):
+    """The router path is resolved from runtime paths, not hardcoded.
+
+    Regression: an earlier version appended 'monorepo-staging' to repo_root,
+    which is already the monorepo root, producing a doubled path. Every other
+    test injected a fake router, so nothing caught it until launchd did.
+    """
+
+    def test_router_path_resolves_to_a_real_script(self) -> None:
+        from trading_bot.runtime_paths import resolve_paths
+
+        router = resolve_paths().repo_root / "scripts" / "run_trading_bot_telegram_command.sh"
+        self.assertTrue(router.exists(), f"router not found at {router}")
+
+    def test_build_config_finds_the_router(self) -> None:
+        import os
+
+        from trading_bot.services.operator_poller import PollerConfigError, build_config
+
+        with patch.dict(os.environ, {"TELEGRAM_BOT_TOKEN": "1:x", "TRADING_BOT_TELEGRAM_RECIPIENT": "1"}):
+            try:
+                cfg = build_config()
+            except PollerConfigError as exc:
+                self.fail(f"build_config rejected a valid setup: {exc}")
+        self.assertTrue(cfg.router_script.exists())
+
 if __name__ == "__main__":
     unittest.main()
