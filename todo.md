@@ -282,11 +282,39 @@ Note `zeroclaw cron` uses **`remove`**, not `delete`; `delete` fails with a
 usage error that is easy to mistake for success, which briefly left two 10:15
 jobs registered at once.
 
-### Remaining rough edge
+### Scheduler-driven scan verified 2026-07-26
 
-`--with-cron` applies only the scan. The backup and watchdog are still added
-by hand from `zeroclaw/cron/trading-bot-daily-scan.md`. Worth folding into the
-script so "apply the three together" is one command that cannot half-succeed.
+Everything up to this point was run from a shell. The scan job had never been
+fired *by ZeroClaw* — which is the link that failed for three months, so it
+was not left to Monday. Fired as a one-shot at 01:00:
+
+```
+run_id : 20260726-010054-f35a
+status : production-candidate-execution-enabled
+orders : []
+firewall: BLOCKED PFE, BLOCKED COST — order already working at the broker
+```
+
+The one-shot cleared without error, `--execute-paper-trades` reached the app
+through the scheduler (hence `execution-enabled` rather than plain
+`production-candidate`), and the firewall blocked exactly the duplicate sells
+it was written for — unattended, in the real scheduled path. The operator
+summary named the block: `Guardrails blocked: execution_intent_firewall.`
+
+So the full chain is now proven: **scheduler → script → scan → guardrails →
+Telegram.** Nothing about Monday's 09:45 run is untested.
+
+### Remaining rough edges
+
+- `--with-cron` applies only the scan. The backup and watchdog are still
+  added by hand from `zeroclaw/cron/trading-bot-daily-scan.md`. Worth folding
+  into the script so "apply the three together" cannot half-succeed.
+- **`.env.example` is not in the repo.** `monorepo-staging/.gitignore:3` has
+  `.env.*`, which catches it as collateral, and it has never been tracked —
+  yet `run_trading_bot_rehearsal.sh` tells you to create `.env` from it. A
+  fresh clone gets neither file. Fix is `!.env.example` in the ignore file
+  plus committing it; it holds only placeholders. The
+  `TRADING_BOT_BACKUP_DEST` entry added 2026-07-26 is currently local-only.
 
 ## Step 7 design note — shadow advisor decision capture (2026-07-26)
 
