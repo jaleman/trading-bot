@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 RAW_COMMAND="$(printf '%s' "$*" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
 
 if [[ -z "$RAW_COMMAND" ]]; then
-	echo "Usage: $0 </bot list|/bot summary|/bot pending|/bot status|/bot balance|/bot holdings|/bot info TICKER|/bot sync|/bot restart|bot list|bot summary|bot pending|bot status|bot balance|bot holdings|bot info TICKER|bot sync|bot restart>" >&2
+	echo "Usage: $0 </bot list|/bot summary|/bot pending|/bot status|/bot balance|/bot holdings|/bot info TICKER|bot list|bot summary|bot pending|bot status|bot balance|bot holdings|bot info TICKER>" >&2
 	exit 1
 fi
 
@@ -36,7 +36,7 @@ if [[ "$NORMALIZED_TOKEN" == "bot" ]]; then
 	SUBCOMMAND_TOKEN="$COMMAND_ARG"
 	SUBCOMMAND_ARG=""
 	if [[ -z "$SUBCOMMAND_TOKEN" ]]; then
-		echo "Usage: bot <list|summary|pending|status|balance|holdings|info TICKER|sync|restart>" >&2
+		echo "Usage: bot <list|summary|pending|status|balance|holdings|info TICKER>" >&2
 		exit 1
 	fi
 	if [[ "$SUBCOMMAND_TOKEN" == *[[:space:]]* ]]; then
@@ -73,14 +73,15 @@ case "$NORMALIZED_TOKEN" in
 		fi
 		exec "$SCRIPT_DIR/print_trading_bot_stock_info.sh" "$COMMAND_ARG"
 		;;
-	bot:sync|/sync)
-		exec "$SCRIPT_DIR/sync_openclaw_workspace.sh"
-		;;
-	bot:restart|/restart)
-		exec "$SCRIPT_DIR/restart_openclaw_gateway.sh"
-		;;
+	# `sync` and `restart` are removed. They dispatched to OpenClaw wrappers,
+	# and OpenClaw is no longer installed -- worse, `restart` exited 0 and
+	# reported "OpenClaw gateway restart command completed" while doing
+	# nothing, so an operator would have believed a restart had happened.
+	# ZeroClaw config sync is scripts/sync_zeroclaw_config.sh; the runtime is
+	# restarted with `zeroclaw service restart`. Neither is an operator
+	# command: both are deliberate maintenance actions.
 	*)
-		echo "Unsupported command. Available commands: /bot list | /bot summary | /bot pending | /bot status | /bot balance | /bot holdings | /bot info <TICKER> | /bot sync | /bot restart"
+		echo "Unsupported command. Available commands: /bot list | /bot summary | /bot pending | /bot status | /bot balance | /bot holdings | /bot info <TICKER>"
 		exit 0
 		;;
 esac

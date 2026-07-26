@@ -28,8 +28,12 @@ class OperatorCommandsTests(unittest.TestCase):
         self.assertIn("/bot list - list supported commands", output)
         self.assertIn("/bot holdings - open position breakdown", output)
         self.assertIn("/bot info <TICKER> - market snapshot for one ticker", output)
-        self.assertIn("bot list | bot summary | bot pending | bot status | bot balance | bot holdings | bot info <TICKER> | bot sync | bot restart - plain-text fallback inputs", output)
-        self.assertIn("/Summary, /Pending, /Status, /Balance, /Holdings, /Info, /Sync, /Restart - compatibility aliases", output)
+        self.assertIn("bot list | bot summary | bot pending | bot status | bot balance | bot holdings | bot info <TICKER> - plain-text fallback inputs", output)
+        # sync/restart dispatched to OpenClaw wrappers that no longer work;
+        # restart even exited 0 while doing nothing.
+        self.assertNotIn("sync", output)
+        self.assertNotIn("restart", output)
+        self.assertIn("/Summary, /Pending, /Status, /Balance, /Holdings, /Info - compatibility aliases", output)
 
     def test_format_latest_summary_returns_today_only(self) -> None:
         yesterday = (date.today() - timedelta(days=1)).isoformat() + "T09:35:00"

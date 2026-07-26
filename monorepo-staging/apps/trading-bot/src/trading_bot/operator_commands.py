@@ -215,10 +215,8 @@ def format_supported_commands() -> str:
             "/bot balance - aggregate account values",
             "/bot holdings - open position breakdown",
             "/bot info <TICKER> - market snapshot for one ticker",
-            "/bot sync - sync staged OpenClaw workspace files",
-            "/bot restart - restart the OpenClaw gateway",
-            "bot list | bot summary | bot pending | bot status | bot balance | bot holdings | bot info <TICKER> | bot sync | bot restart - plain-text fallback inputs",
-            "/Summary, /Pending, /Status, /Balance, /Holdings, /Info, /Sync, /Restart - compatibility aliases",
+            "bot list | bot summary | bot pending | bot status | bot balance | bot holdings | bot info <TICKER> - plain-text fallback inputs",
+            "/Summary, /Pending, /Status, /Balance, /Holdings, /Info - compatibility aliases",
         ]
     )
 
