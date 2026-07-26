@@ -98,11 +98,14 @@ Current canonical scripts:
 - `scripts/print_trading_bot_runtime_status.sh`
 - `scripts/print_trading_bot_stock_info.sh`
 - `scripts/print_trading_bot_supported_commands.sh`
-- `scripts/restart_openclaw_gateway.sh`
 - `scripts/run_trading_bot_telegram_command.sh`
-- `scripts/prepare_openclaw_cutover_jobs.sh`
-- `scripts/merge_openclaw_trading_job.py`
-- `scripts/sync_openclaw_workspace.sh`
+- `scripts/run_trading_bot_daily.sh` — scheduled flow: scan, then report
+- `scripts/run_trading_bot_operator_poller.sh` — deterministic /bot poller
+- `scripts/install_operator_poller_service.sh` — launchd install for the poller
+- `scripts/run_trading_bot_reconciliation.sh` — scan log vs broker fills
+- `scripts/run_trading_bot_read_model.sh` — derived SQLite projection
+- `scripts/run_trading_bot_log_maintenance.sh` — rotation and off-machine backup
+- `scripts/sync_zeroclaw_config.sh` — deploy repo-managed ZeroClaw config
 
 Why this layer exists:
 - avoids fragile deep-path Python commands in cron payloads
