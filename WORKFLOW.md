@@ -3,12 +3,12 @@
 How I use Claude Code to work on this project. Read this at the start of a
 work cycle, alongside `todo.md` and (if present) `startHere.md`.
 
-This project has been dormant since 2026-03-10. The cutover to the
-OpenClaw-managed monorepo runtime (`monorepo-staging/`) was completed
-2026-03-08, paper-trade execution was exercised successfully on 2026-03-09,
-and an open decision about reverse-syncing deployed OpenClaw changes back
-into the repo was left unresolved in `todo.md`. Treat anything below about
-"current state" as unverified until Phase 0 confirms it.
+**Status note, 2026-07-26.** The dormancy this file was written against
+(2026-03-10 → 2026-07-25) is over, and **Phase 0 below is complete** — its
+findings are the dated sections in `todo.md`. The reverse-sync question it
+names is settled (one-way, repo → runtime), and OpenClaw has been replaced
+by ZeroClaw. Read Phase 0 as a record of how the restart was done, not as a
+task. Everything from "Goals" onward is still current practice.
 
 ## The three pieces
 
@@ -93,11 +93,14 @@ must not touch it directly:
    `bootstrap_trading_bot.sh` → `run_trading_bot_tests.sh` →
    `run_trading_bot_rehearsal.sh` → `print_trading_bot_operator_summary.sh`.
 3. Only after that loop is green does a change get promoted via
-   `sync_openclaw_workspace.sh` — which is the one script that actually
-   touches the deployed runtime, and should always be a deliberate, reviewed
-   step, never something a loop or scheduled task does on its own.
-4. `restart_openclaw_gateway.sh` only when a reload is actually needed, per
-   `startHere.md`.
+   `sync_zeroclaw_config.sh` — which is the one script that actually touches
+   the deployed runtime, and should always be a deliberate, reviewed step,
+   never something a loop or scheduled task does on its own. Verify with
+   `sync_zeroclaw_config.sh --check`.
+4. `zeroclaw service restart` only when a reload is actually needed, per
+   `startHere.md`. (Updated 2026-07-26: this step named
+   `sync_openclaw_workspace.sh` and `restart_openclaw_gateway.sh`, both
+   removed in commit 514073f.)
 
 ## A typical cycle, once Phase 0 is done
 

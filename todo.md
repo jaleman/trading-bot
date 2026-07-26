@@ -10,19 +10,23 @@ Updated: 2026-07-25 (Phase 0/1 reassessment session — see WORKFLOW.md)
 - **Current milestone**: harden reliability (Ollama timeout margin, market
   data adapter retries) and decide the OpenClaw-vs-lighter-harness question
   before redeploying and restarting the 90-day clock.
-- **Next action (2026-07-26): step 5 — supervised rehearsal, then activate.**
-  Steps 1–4 of the agreed plan are complete and pushed. What remains:
+- **Next action (2026-07-26): step 5 done — apply the cron jobs.**
+  Steps 1–5 of the agreed plan are complete. What remains:
 
-  1. Run a supervised end-to-end rehearsal (`run_trading_bot_daily.sh`) and
-     confirm the Telegram summary arrives.
+  1. ~~Supervised end-to-end rehearsal + Telegram delivery.~~ **DONE
+     2026-07-26** — see "Step 5 supervised rehearsal" below. It found and
+     fixed a defect that would have made the scheduled job never trade.
   2. Apply the three cron jobs together — scan 09:35, watchdog 11:00, Drive
      backup 10:15 — via `sync_zeroclaw_config.sh --with-cron` plus the two
      companion jobs in `zeroclaw/cron/trading-bot-daily-scan.md`.
   3. Record the clock-start date and baseline portfolio value so
-     `gate_metrics` measures the right window. Note the first run closes PFE
-     and COST on the stop rule, so day one shows two realised losses from the
-     dormancy cleanup rather than from the strategy.
-  4. Then steps 6–7: the strategy plug-in interface, and the shadow advisor.
+     `gate_metrics` measures the right window. **The dormancy cleanup already
+     happened** — PFE and COST were sold during the 2026-07-26 rehearsal, so
+     those two realised losses land on 07-26 and are *not* strategy results.
+     Start the measurement window after them.
+  4. Then steps 6–7: the strategy plug-in interface, and the shadow advisor
+     — design note for step 7 is below ("Step 7 design note — shadow advisor
+     decision capture"), and it is deliberately sequenced *after* activation.
 
 ### Harness hardening complete (2026-07-25/26)
 - Scheduling, crash recovery, staleness reporting: ZeroClaw, all verified
@@ -109,6 +113,145 @@ Rebuilding surfaced things that were impractical to see before:
   runs from before broker context was wired in, not failures.
 - Older entries have null `volatility_20d` / `recent_return_5d` (fields
   added in the March 9 refactor), so the schema tolerates nulls.
+
+## Step 5 supervised rehearsal — 2026-07-26
+
+Run supervised, on a Sunday, market closed. **Two runs**: a dry run, then an
+executing one after fixing what the dry run exposed.
+
+### The defect: the scheduled job would never have traded
+
+`run_trading_bot_daily.sh` invoked `run_trading_bot_rehearsal.sh` with no
+arguments. `--rehearsal` sets the four `include_*` flags but deliberately
+**not** `execute_paper_trades` (`cli.py:82`, help text: "without forcing
+paper-trade execution"), and the whole execution branch —
+`build_order_results` → `broker.place_paper_trade`, plus
+`evaluate_execution_policy`, `evaluate_position_size`,
+`evaluate_trade_limits` and `validate_execution_intents` — sits behind
+`if execute_paper_trades:` at `daily_scan.py:349`.
+
+So the 09:35 cron would have scanned, decided *sell PFE, sell COST*, placed
+nothing, and reported `Trading scan completed. Guardrails passed.` every
+morning. **The signature failure of this project, with a green light on it** —
+and harder to catch than the April silence, because absence of a message is
+noticeable and a daily healthy message is not.
+
+Only `daily_claude_call_limit` appeared in the guardrail record. The other
+four never evaluated, so they would have produced no evidence across the
+90-day window despite being correctly implemented.
+
+`--dry-run` was *not* what suppressed execution: it only gated `notify()`.
+
+### Fixed
+
+`run_trading_bot_daily.sh` now passes `--execute-paper-trades` on the real
+path, and `--dry-run` suppresses execution as well as delivery — a flag by
+that name that still placed orders is a trap. Header comment records why.
+
+### Verified
+
+| | dry run `20260726-001739-da0f` | executing `20260726-002430-aa41` |
+|---|---|---|
+| status | `production-candidate` | `production-candidate-paper-trades-executed` |
+| guardrails evaluated | 1 | **5**, all passed |
+| orders | `[]` | PFE 914 sell, COST 24 sell — both `accepted` |
+
+Confirmed at the broker: `print_trading_bot_pending_orders.sh` went from "No
+pending orders" to both sells queued. Market closed, so they fill at Monday's
+open — **fill prices will differ from the Friday closes the decision was made
+against.**
+
+Telegram delivery confirmed received on device, `channel send` in 0.7s, no
+agent in the path. The operator summary correctly leads with "Executed 2
+paper-trade order(s)"; when nothing executes it omits that clause.
+
+### Notes for the next run
+
+- `trades_today: 2` — the day's budget is **exhausted by two sells**. This is
+  the documented divergence (`max_trades_per_day` restricts buys, but sells
+  consume the allowance) now demonstrated live: Claude skipped ABBV, JNJ and
+  LLY explicitly citing the exhausted limit. Monday's scan starts fresh.
+- Claude calls: 2 of 5 used on 07-26.
+- Telegram is **wired** — `channel list` shows it green and both env vars are
+  set. Adoption checklist item 4 and "no channels configured" in the Phase 3
+  section are stale; Telegram needs no further work.
+
+## Step 7 design note — shadow advisor decision capture (2026-07-26)
+
+Question raised: should the daily scan capture decision, strategy, the order
+sent to Alpaca, results and summary into a log that the shadow advisor can
+analyse? **Yes — but the logging is ~85% built already, and treating this as
+a new logging project would rebuild what Phase 1.5 landed.** The actual work
+is one narrow gap.
+
+### What each scan already writes
+
+`DailyScanSummary` (`models.py:250`) is serialised whole into `trades.jsonl`
+every run and projected into the read model. It already carries
+`strategy_file` and `strategy_evaluation`, `decisions`, `order_results`,
+`notes`/`triggered`/`watching`, `indicator_snapshots` for all 50 symbols,
+`account`, `positions`, `guardrail_state` and `guardrails` — correlated by
+run ID across `trades.log` and `trades.jsonl`.
+
+### The useful accident: three opinions per run, already separated
+
+The fields do not overwrite each other, so each run records what every
+opinion source wanted, independently:
+
+| source | field |
+|---|---|
+| deterministic `entry_score` ordering | `strategy_evaluation.entry_decisions` |
+| Ollama ranking, with confidence | `local_analysis.ranked_candidates` |
+| Claude's reviewed list (escalation only) | `decisions` |
+
+Claude replaces `decisions` wholesale at `daily_scan.py:334`, but the
+deterministic and local rankings survive alongside it. Combined with
+`indicator_snapshots` covering the whole universe daily — which accumulates
+a forward price series for symbols that were *not* bought — the disagreement
+between sources and the counterfactual outcome of the road not taken are
+both already recoverable. **This is the main reason not to redesign the
+logging: the shadow-advisor dataset is largely emergent from what Phase 1.5
+already captures.**
+
+### The one real gap: no outcome to score against
+
+`OrderResult` (`models.py:163`) is `id, symbol, qty, side, status` — no fill
+price, no fill timestamp — and status is recorded at submission, which is why
+6 of 8 historical orders read `PENDING_NEW`. `services/reconciliation.py`
+computes fills and FIFO round-trip P/L correctly, but it is an on-demand
+script whose output is written nowhere.
+
+So the log holds three opinions per day and **no scoring key**. Everything
+else in the original question is already captured; this is not.
+
+Two narrow additions close it:
+
+1. Carry fill price, filled qty and fill timestamp on `OrderResult`.
+2. Persist reconciliation's per-run realized P/L back into the JSONL, or as a
+   read-model table, so decisions join to outcomes without an ad-hoc query.
+
+### Framing: disagreement log first, scoreboard much later
+
+The April window produced **8 orders across 45 runs**. Ninety days at
+`max_trades_per_day: 2` against a 4-slot cap plausibly yields round trips in
+the low tens. That supports forensics — *why was this trade taken, and did
+the sources disagree* — and does **not** support ranking advisors against
+each other with statistical confidence. Decide this now rather than
+discovering it in October. Same instinct as `gate_metrics` refusing to
+compute consecutive losses: do not present inference as fact.
+
+Also price in that a shadow advisor running daily makes a Claude call on days
+escalation would not have fired, against the 5/day limit and the monthly cap
+that is still unverified in the console (open item from the drift audit).
+
+### Sequencing
+
+**Not before activation.** Closing the outcome loop modifies `OrderResult`,
+which is on the live execution path; step 5 should not carry an unrelated
+change to it. Do this after the cron jobs are applied and the clock has
+started — the additions are additive to the schema, and the read model is
+rebuildable, so nothing is lost by capturing outcomes from day N rather than
+day 1.
 
 ## OPEN DECISION: position cap, concentration, and selection order
 
@@ -340,24 +483,43 @@ filenames. Trial evidence below.
    `crontab -l`, which was already wrong) before reuse.
 3. ~~**Define the daily scan.**~~ **DEFINED, DELIBERATELY NOT ACTIVE.**
    `zeroclaw/cron/trading-bot-daily-scan.md` records the job:
-   `35 9 * * 1-5` `America/Detroit` → `run_trading_bot_rehearsal.sh`, a bare
+   `35 9 * * 1-5` `America/Detroit` → `run_trading_bot_daily.sh`, a bare
    command with no model in the execution path. Apply with
-   `sync_zeroclaw_config.sh --with-cron`.
+   `sync_zeroclaw_config.sh --with-cron`, together with the backup (10:15)
+   and watchdog (11:00) companion jobs defined in the same file.
 
-   **Not scheduled yet, on purpose:** the guardrails drift audit is the last
-   unverified safety claim and has not been re-run since the 2026-03-09
-   refactor. The first active run also closes PFE and COST on the stop rule,
-   so enabling it is a real trading action, not just a config change.
-4. **Wire Telegram** — needs the bot token, which is the operator's to enter.
-   Then route `/bot` at `run_trading_bot_telegram_command.sh`, replacing the
-   56-line TypeScript shim with configuration.
+   **Not scheduled yet, on purpose:** the drift audit that previously gated
+   this is complete (`docs/SecurityAudit-2026-07-25.md`) and the kill switch
+   it found broken is repaired and tested. What remains is the supervised
+   rehearsal — the first active run closes PFE and COST on the stop rule, so
+   enabling it is a real trading action, not just a config change.
+4. ~~**Wire Telegram**~~ **DONE.** Token entered by the operator;
+   `zeroclaw channel list` reports Telegram available, and delivery to the
+   operator recipient was confirmed end-to-end on 2026-07-26 (0.7s, no agent
+   in the path). `/bot` routes at `run_trading_bot_telegram_command.sh`,
+   replacing the 56-line TypeScript shim with configuration.
 5. **Resolve the deprecated docs.** The 2026-07-25 deprecation markers in
    `Architecture.md`, `openclaw/README.md`, and `TradingBotPlan.md` can now
    be rewritten against ZeroClaw rather than left as tombstones. Decide
    whether `monorepo-staging/openclaw/` is kept as history or removed.
-6. **Guardrails drift audit** (Phase 2, still outstanding) — worth doing
-   *before* resuming scans, and now against ZeroClaw's risk profile too,
-   which enforces more than `docs/Security.md` documents.
+6. ~~**Guardrails drift audit**~~ **DONE 2026-07-25 —
+   `docs/SecurityAudit-2026-07-25.md`.** Every trading guardrail in
+   `docs/Security.md` is implemented and enforced; the drift is operational.
+   It found the documented kill switch was broken (it named an OpenClaw plist
+   that does not exist, and failed silently), repaired it, and ran Test 7 for
+   the first time: 1s stop, 6s restore against a 60s criterion. Doing so
+   surfaced two further defects — `estop.enabled` defaulted false, and
+   `require_otp_to_resume` defaulted true against a disabled OTP config, so
+   engaging the kill switch locked you out of releasing it. Both fixed in
+   `config.template.toml`.
+
+   Still open from the audit, none blocking activation: no automated
+   pass/fail evaluation of both halves of the paper-to-live gate;
+   `logs/incidents.log` is referenced but never created; the persona files
+   (checklist item 2) are still unported; the Anthropic monthly spend limit
+   is unverified in the console; and `Security.md`'s OpenClaw-era sections
+   (§1.1–1.3, the credential table, Telegram pairing paths) are still to be
+   rewritten as part of checklist item 5.
 7. **Restart the 90-day clock clean** once the above is green.
 
 ## Phase 3 — ZeroClaw trial (2026-07-25)
@@ -425,7 +587,8 @@ to hand-write `config.toml` rather than trust the wizards.
   provider `ollama.default` → `gemma4:e4b-mlx`, risk profile scoped to the
   repo with five wrapper scripts allowlisted
 - test cron job removed; **no scheduled jobs remain**
-- no channels configured — Telegram not wired (needs the bot token)
+- ~~no channels configured~~ — Telegram wired and delivery verified
+  2026-07-26 (see the step 5 rehearsal section)
 
 ## Decided 2026-07-25
 - **Time Machine: not being set up at this time.** Accepted consequences:
@@ -727,17 +890,15 @@ test fixtures using `"qwen2.5:7b"` as arbitrary mock data.
 
 ## Candidate future phases (not committed)
 
-- **Phase 2 — Reliability hardening**: Ollama timeout margin is now fixed
-  (see above). Remaining: add retry/backoff for the market-data adapter
-  (2 full scan-days were lost to `Connection reset by peer` in April), add
-  failure alerting via Telegram, and re-run a drift audit of
-  `services/guardrails.py` against `docs/Security.md` (never re-verified
-  since the Mar 9 refactor).
-- **Phase 3 — Harness decision + redeploy**: resolve OpenClaw vs.
-  NanoClaw/ZeroClaw, (re)install the chosen harness, restore the cron job,
-  and resume scheduled scans — restart the 90-day live-capital clock clean
-  given the reliability gaps and the unmanaged-position drawdown in the
-  original window.
+- ~~**Phase 2 — Reliability hardening**~~ — **COMPLETE.** All four items
+  landed 2026-07-25: Ollama timeout margin, market-data retry/backoff and
+  per-symbol isolation, Telegram failure alerting (plus the staleness
+  watchdog), and the guardrails drift audit. See the dated sections above.
+- **Phase 3 — Harness decision + redeploy** — decision made (ZeroClaw,
+  installed and running as `com.zeroclaw.daemon`); redeploy is what the
+  "Next action" at the top of this file is executing. Restarting the 90-day
+  clock clean is the last step, given the reliability gaps and the
+  unmanaged-position drawdown in the original window.
 
 ---
 
