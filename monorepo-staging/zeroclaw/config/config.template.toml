@@ -23,14 +23,6 @@ model_provider = "ollama.default"
 acp_enable_mcp = false
 delegate_same_risk_profile = true
 enabled = true
-# Without this the /bot skill installs but is never loaded, and the model
-# answers operator questions from its own knowledge instead of running the
-# wrapper scripts -- which is exactly the improvisation this design exists
-# to prevent.
-skill_bundles = ["tradingbot"]
-
-[skill_bundles.tradingbot]
-dir = "shared/skills/tradingbot"
 
 [agents.tradingbot.a2a]
 published = false
