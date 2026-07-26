@@ -44,6 +44,25 @@ if [[ -z "$RECIPIENT" && -f "$ENV_FILE" ]]; then
 		| head -1 | cut -d= -f2- | tr -d '"' | tr -d "'" | xargs || true)"
 fi
 
+# The scheduler spawns this with a minimal PATH that does not include
+# Homebrew, so `zeroclaw` was not resolvable and delivery was skipped -- while
+# still returning success. Found 2026-07-26 when a scheduler-driven run
+# completed normally and no Telegram message arrived.
+PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+
+DELIVERY_LOG="$MONOREPO_ROOT/runtime/trading-bot/logs/delivery.log"
+
+# Every delivery attempt is recorded. The old version wrote its failures to
+# stderr and returned 0; nothing captures a scheduled job's stderr, so a
+# summary that was never sent looked exactly like one that was. That is the
+# failure this whole project exists to correct -- it must not live in the
+# reporting path.
+record_delivery() {
+	mkdir -p "$(dirname "$DELIVERY_LOG")" 2>/dev/null || true
+	printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$1" >>"$DELIVERY_LOG" 2>/dev/null || true
+	echo "$1" >&2
+}
+
 notify() {
 	local message="$1"
 	if [[ "$DRY_RUN" == "1" ]]; then
@@ -53,17 +72,22 @@ notify() {
 		return 0
 	fi
 	if [[ -z "$RECIPIENT" ]]; then
-		echo "No TRADING_BOT_TELEGRAM_RECIPIENT configured; skipping delivery." >&2
+		record_delivery "SKIPPED no TRADING_BOT_TELEGRAM_RECIPIENT configured"
 		return 0
 	fi
 	if ! command -v zeroclaw >/dev/null 2>&1; then
-		echo "zeroclaw not on PATH; skipping delivery." >&2
+		record_delivery "SKIPPED zeroclaw not on PATH (PATH=$PATH)"
 		return 0
 	fi
-	# Delivery failure must not mask the scan result, so this never aborts.
-	zeroclaw channel send "$message" \
-		--channel-id telegram --recipient "$RECIPIENT" >/dev/null 2>&1 \
-		|| echo "WARNING: Telegram delivery failed." >&2
+	# Delivery failure must not mask the scan result, so this never aborts --
+	# but it is always recorded.
+	local output
+	if output="$(zeroclaw channel send "$message" \
+		--channel-id telegram --recipient "$RECIPIENT" 2>&1)"; then
+		record_delivery "SENT ok"
+	else
+		record_delivery "FAILED ${output//$'\n'/ }"
+	fi
 }
 
 STARTED="$(date '+%Y-%m-%d %H:%M:%S')"

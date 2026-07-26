@@ -301,8 +301,40 @@ through the scheduler (hence `execution-enabled` rather than plain
 it was written for — unattended, in the real scheduled path. The operator
 summary named the block: `Guardrails blocked: execution_intent_firewall.`
 
-So the full chain is now proven: **scheduler → script → scan → guardrails →
-Telegram.** Nothing about Monday's 09:45 run is untested.
+### 5. CORRECTED — Telegram delivery was NOT working under the scheduler
+
+The run above was recorded here as proving the chain through to Telegram. It
+did not. Scan, guardrails and summary were verified; **delivery was inferred,
+not confirmed, and no message arrived.** The operator caught it — the last
+message received was the manual 00:25 send.
+
+Cause: the scheduler spawns jobs with a minimal PATH that excludes
+`/opt/homebrew/bin`, so `zeroclaw` was not resolvable. `notify()` then took
+its `command -v zeroclaw` branch, wrote a line to stderr, and **returned 0**.
+Nothing captures a scheduled job's stderr, so the scan reported success and
+delivered nothing.
+
+That is precisely the failure this entire project exists to correct, still
+living inside the reporting path — and it would have produced a bot that ran
+perfectly every morning in total silence.
+
+Fixed in `run_trading_bot_daily.sh`:
+
+- PATH is extended to include Homebrew before any delivery attempt.
+- **Every delivery attempt is now recorded** to
+  `runtime/trading-bot/logs/delivery.log` — `SENT ok`, `FAILED <error>`, or
+  `SKIPPED <reason>`. Delivery still never aborts the scan, but it can no
+  longer fail invisibly.
+
+Verified through the scheduler after the fix: `2026-07-26 01:06:44 SENT ok`,
+message received on device.
+
+**Lesson, again: a code path that returns success on failure is worse than
+one that crashes.** Three of the five defects found tonight were this shape.
+
+So the chain is now proven end to end — **scheduler → script → scan →
+guardrails → Telegram** — with delivery confirmed on the device rather than
+assumed.
 
 ### Remaining rough edges
 
