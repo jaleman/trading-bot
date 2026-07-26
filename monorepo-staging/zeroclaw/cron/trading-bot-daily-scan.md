@@ -6,13 +6,20 @@ Repository-managed definition of the scheduled trading scan. Applied with
 ## The job
 
 ```
-zeroclaw cron add '35 9 * * 1-5' \
+zeroclaw cron add '45 9 * * 1-5' \
   '<REPO_ROOT>/monorepo-staging/scripts/run_trading_bot_daily.sh' \
   --agent tradingbot \
   --tz America/Detroit
 ```
 
-Weekdays at 09:35 America/Detroit, five minutes after the US market opens.
+Weekdays at 09:45 America/Detroit, fifteen minutes after the US market opens.
+
+**Moved from 09:35 on 2026-07-26.** Nothing about a daily close-based
+strategy needs the earlier slot, and 09:35 put the scan inside the window
+where orders from the open may still be filling. The execution firewall now
+blocks symbols with working orders, so this is defence in depth rather than
+the fix — but it also keeps entries out of the opening auction's spread. The
+11:00 watchdog deadline is unaffected.
 
 `run_trading_bot_daily.sh` is the complete flow: run the scan, then report
 the outcome to Telegram via `zeroclaw channel send`. On failure it sends the
@@ -47,11 +54,13 @@ freshness so staleness is observable rather than invisible.
 
 ## Reporting
 
-Operator summaries are delivered by the Telegram channel once it is
-configured (`zeroclaw channel`), routed at
-`run_trading_bot_telegram_command.sh`. Until then the scan writes its record
-to `runtime/trading-bot/logs/` as usual and reporting is pull-based via
-`/bot` equivalents run locally.
+Operator summaries are delivered by the Telegram channel, routed at
+`run_trading_bot_telegram_command.sh`. **Configured and verified end-to-end
+2026-07-26** — token entered by the operator, `zeroclaw channel list` reports
+Telegram available, and a real summary was delivered to the operator's device
+in 0.7s with no agent in the path. The scan also writes its record to
+`runtime/trading-bot/logs/`, and `/bot` remains available for pull-based
+queries.
 
 ## Companion job: daily off-machine backup
 
@@ -67,14 +76,15 @@ zeroclaw cron add '15 10 * * 1-5' \
   --tz America/Detroit
 ```
 
-Runs at 10:15, after the 09:35 scan has completed. This is a local file copy
+Runs at 10:15, after the 09:45 scan has completed. This is a local file copy
 into a synced folder — Drive handles the upload — so it introduces no new
 outbound path. The backup's size guard still refuses to overwrite a larger
 backup with a smaller source, so a corrupted local log cannot destroy the
 good copy.
 
-The script must be added to `allowed_commands` in the risk profile before
-this job can be scheduled.
+`run_trading_bot_log_maintenance.sh` is already in `allowed_commands` in
+`config/config.template.toml`, as is `run_trading_bot_watchdog.sh`, so no
+risk-profile change is needed to schedule these.
 
 ## Companion job: staleness watchdog
 
@@ -90,7 +100,7 @@ zeroclaw cron add '0 11 * * 1-5' \
   --tz America/Detroit
 ```
 
-Runs at 11:00, well after the 09:35 scan. It counts missed *trading weekdays*
+Runs at 11:00, well after the 09:45 scan. It counts missed *trading weekdays*
 rather than elapsed hours -- an earlier version asked "is today a weekday" and
 consequently reported a 92-day-old scan as healthy simply because the check
 ran on a Saturday, staying silent through precisely the outage it exists to
@@ -98,14 +108,29 @@ catch.
 
 Note this shares the ZeroClaw scheduler with the scan, so it cannot report
 ZeroClaw itself being down. That gap is covered by the absence of the daily
-summary: no message by 09:40 on a weekday is itself the signal.
+summary: no message by 09:50 on a weekday is itself the signal.
 
 ## Status
 
-**NOT YET ACTIVE.** The guardrails drift audit that previously gated this is
-complete (see `docs/SecurityAudit-2026-07-25.md`) and the kill switch it found
-broken has been repaired and tested. Remaining before activation is a
-supervised end-to-end rehearsal, then applying these three jobs together.
+**NOT YET ACTIVE — ready to apply.** Everything that gated this is done: the
+guardrails drift audit (`docs/SecurityAudit-2026-07-25.md`), the repaired and
+tested kill switch, Telegram delivery, and the supervised rehearsal on
+2026-07-26.
 
-The first active run will close PFE and COST on the stop-loss rule; LIN and
-NEE remain open. See the position decision in `todo.md`.
+The dormancy cleanup has **already happened**: that rehearsal sold PFE and
+COST on the stop-loss rule. LIN and NEE remain open. So the first scheduled
+run is an ordinary trading day, not a cleanup — see the step 5 section in
+`todo.md`.
+
+Two defects the rehearsal found, both fixed, both of which would have made
+these jobs useless in the same silent way:
+
+- `run_trading_bot_daily.sh` did not pass `--execute-paper-trades`, so the
+  scheduled scan would have decided trades and placed none.
+- `sync_zeroclaw_config.sh --with-cron` scheduled
+  `run_trading_bot_rehearsal.sh` rather than `run_trading_bot_daily.sh` —
+  which neither executes nor reports, so applying the job as documented would
+  have bypassed the fix above *and* sent no Telegram summary at all.
+
+Apply all three jobs together. `--with-cron` currently adds only the scan;
+the backup and watchdog are still added by hand from this file.

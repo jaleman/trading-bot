@@ -17,6 +17,7 @@ from trading_bot.models import (  # noqa: E402
     GuardrailState,
     ModelsConfig,
     MovingAverageConfig,
+    OrderResult,
     PaperToLiveConfig,
     PositionSnapshot,
     StrategyConfig,
@@ -170,6 +171,77 @@ class GuardrailTests(unittest.TestCase):
             "Blocked buy for JPM because the position already exists and pyramiding is disabled.",
             status.reasons,
         )
+
+    def test_execution_firewall_blocks_sell_when_order_already_working(self) -> None:
+        """The stop-loss re-entry case: a working sell still shows its shares in
+        the position, so every other check passes and the exit is submitted twice."""
+        strategy = build_strategy()
+        filtered, status = validate_execution_intents(
+            strategy,
+            [TradeDecision(symbol="PFE", action="sell", reason="stop loss", qty=914)],
+            [PositionSnapshot("PFE", 914, 27.25, 24.54, -2476.94, -0.0995)],
+            AccountSnapshot(cash=1000, portfolio_value=1000, buying_power=1000),
+            [OrderResult(id="abc", symbol="PFE", qty=914, side="SELL", status="ACCEPTED")],
+        )
+
+        self.assertEqual(filtered, [])
+        self.assertFalse(status.allowed)
+        self.assertIn(
+            "Blocked sell for PFE because an order is already working at the broker.",
+            status.reasons,
+        )
+        self.assertEqual(status.details["pending_order_symbols"], ["PFE"])
+
+    def test_execution_firewall_blocks_buy_when_order_already_working(self) -> None:
+        strategy = build_strategy()
+        filtered, status = validate_execution_intents(
+            strategy,
+            [TradeDecision(symbol="ABBV", action="buy", reason="entry")],
+            [],
+            AccountSnapshot(cash=1000, portfolio_value=1000, buying_power=1000),
+            [OrderResult(id="abc", symbol="ABBV", qty=10, side="BUY", status="NEW")],
+        )
+
+        self.assertEqual(filtered, [])
+        self.assertFalse(status.allowed)
+        self.assertIn(
+            "Blocked buy for ABBV because an order is already working at the broker.",
+            status.reasons,
+        )
+
+    def test_execution_firewall_only_blocks_symbols_with_working_orders(self) -> None:
+        strategy = build_strategy()
+        filtered, status = validate_execution_intents(
+            strategy,
+            [
+                TradeDecision(symbol="PFE", action="sell", reason="stop loss", qty=914),
+                TradeDecision(symbol="COST", action="sell", reason="stop loss", qty=24),
+            ],
+            [
+                PositionSnapshot("PFE", 914, 27.25, 24.54, -2476.94, -0.0995),
+                PositionSnapshot("COST", 24, 1002.81, 935.03, -1626.72, -0.0676),
+            ],
+            AccountSnapshot(cash=1000, portfolio_value=1000, buying_power=1000),
+            [OrderResult(id="abc", symbol="PFE", qty=914, side="SELL", status="ACCEPTED")],
+        )
+
+        self.assertEqual([decision.symbol for decision in filtered], ["COST"])
+        self.assertFalse(status.allowed)
+
+    def test_execution_firewall_allows_when_no_orders_are_working(self) -> None:
+        strategy = build_strategy()
+        decision = TradeDecision(symbol="PFE", action="sell", reason="stop loss", qty=914)
+        position = PositionSnapshot("PFE", 914, 27.25, 24.54, -2476.94, -0.0995)
+        account = AccountSnapshot(cash=1000, portfolio_value=1000, buying_power=1000)
+
+        for label, open_orders in (("empty", []), ("omitted", None)):
+            with self.subTest(open_orders=label):
+                filtered, status = validate_execution_intents(
+                    strategy, [decision], [position], account, open_orders
+                )
+                self.assertEqual(filtered, [decision])
+                self.assertTrue(status.allowed)
+                self.assertEqual(status.details["pending_order_symbols"], [])
 
 
 if __name__ == "__main__":

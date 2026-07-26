@@ -16,9 +16,10 @@ Updated: 2026-07-25 (Phase 0/1 reassessment session — see WORKFLOW.md)
   1. ~~Supervised end-to-end rehearsal + Telegram delivery.~~ **DONE
      2026-07-26** — see "Step 5 supervised rehearsal" below. It found and
      fixed a defect that would have made the scheduled job never trade.
-  2. Apply the three cron jobs together — scan 09:35, watchdog 11:00, Drive
-     backup 10:15 — via `sync_zeroclaw_config.sh --with-cron` plus the two
-     companion jobs in `zeroclaw/cron/trading-bot-daily-scan.md`.
+  2. Apply the three cron jobs together — scan **09:45**, Drive backup 10:15,
+     watchdog 11:00 — via `sync_zeroclaw_config.sh --with-cron` plus the two
+     companion jobs in `zeroclaw/cron/trading-bot-daily-scan.md`. Safe to run
+     unattended: see "Unattended-safe activation" below.
   3. Record the clock-start date and baseline portfolio value so
      `gate_metrics` measures the right window. **The dormancy cleanup already
      happened** — PFE and COST were sold during the 2026-07-26 rehearsal, so
@@ -175,6 +176,73 @@ paper-trade order(s)"; when nothing executes it omits that clause.
 - Telegram is **wired** — `channel list` shows it green and both env vars are
   set. Adoption checklist item 4 and "no channels configured" in the Phase 3
   section are stale; Telegram needs no further work.
+
+## Unattended-safe activation — 2026-07-26
+
+The operator may not be at the keyboard for the first scheduled run. Rather
+than schedule around that, the two things that made supervision necessary
+were fixed. **Supervision is now optional.**
+
+### 1. The firewall could not see working orders
+
+`validate_execution_intents` checked positions only, and `PositionSnapshot`
+carries `qty` with no `qty_available`. A working sell still shows its shares
+in the position, so every check passed for a symbol already being sold: the
+scan would re-decide the exit and submit it twice. Nothing in this process
+prevented that — rejection depended on the broker noticing the shares were
+held, which is luck, not a control.
+
+Fixed: `broker.get_open_orders()` (which already existed, used by `/bot
+pending`) is now fetched with positions and passed to the firewall, which
+blocks any buy or sell whose symbol has a working order. The guardrail record
+carries `pending_order_symbols`.
+
+Positions and orders are committed together deliberately — the firewall fails
+open without the orders, so a partial fetch yielding positions but no orders
+would silently restore the bug.
+
+**Verified against live broker state** while PFE and COST had working sells,
+read-only, nothing submitted:
+
+```
+working orders  : COST SELL ACCEPTED, PFE SELL ACCEPTED
+with the fix    : blocked PFE, blocked COST, allowed ABBV (no working order)
+without the fix : would have submitted PFE, COST and ABBV
+```
+
+4 new tests; 149 pass.
+
+### 2. `--with-cron` scheduled the wrong script
+
+`sync_zeroclaw_config.sh` set `SCAN` to `run_trading_bot_rehearsal.sh`, not
+`run_trading_bot_daily.sh`. The rehearsal script neither executes nor reports,
+so applying the cron *as documented* would have bypassed the
+`--execute-paper-trades` fix **and** delivered no Telegram summary — the
+identical silent-failure shape, one layer down. Same root cause as the step 5
+defect: `rehearsal` and `daily` are easy to confuse and only one of them
+trades.
+
+### 3. Scan moved 09:35 → 09:45
+
+Defence in depth, not the fix. Nothing about a daily close-based strategy
+needs the earlier slot, and 09:35 sat inside the window where orders from the
+open may still be filling. Also keeps entries out of the opening auction's
+spread. The 11:00 watchdog deadline is unaffected; its comments and test
+docstrings were resynced.
+
+### Also corrected
+
+The cron doc claimed `run_trading_bot_log_maintenance.sh` had to be added to
+`allowed_commands` before the backup job could be scheduled. It and
+`run_trading_bot_watchdog.sh` are **already allowlisted** in
+`config.template.toml`; no risk-profile change is needed.
+
+### Remaining rough edge
+
+`--with-cron` applies only the scan. The backup (10:15) and watchdog (11:00)
+jobs still have to be added by hand from
+`zeroclaw/cron/trading-bot-daily-scan.md`. Worth folding into the script so
+"apply the three together" is one command that cannot half-succeed.
 
 ## Step 7 design note — shadow advisor decision capture (2026-07-26)
 

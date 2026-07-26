@@ -24,7 +24,7 @@ from pathlib import Path
 # Weekday scans only; a quiet Saturday is not a fault.
 TRADING_WEEKDAYS = {0, 1, 2, 3, 4}
 
-# The scan runs at 09:35. Today only counts as missed once this hour passes,
+# The scan runs at 09:45. Today only counts as missed once this hour passes,
 # which absorbs a late start without crying wolf.
 DEFAULT_SCAN_DEADLINE_HOUR = 11.0
 

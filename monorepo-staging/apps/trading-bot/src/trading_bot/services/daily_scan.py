@@ -192,6 +192,7 @@ def _run_daily_scan_body(
     local_analysis = None
     decisions = []
     order_results = []
+    open_orders = []
 
     # Preload the local model before the network fetches below. A daily scan
     # always starts with the model cold, and its load time would otherwise be
@@ -209,9 +210,17 @@ def _run_daily_scan_body(
         try:
             broker = AlpacaBrokerClient()
             account = broker.get_account_balance()
-            positions = broker.get_open_positions()
+            fetched_positions = broker.get_open_positions()
+            # Committed together, deliberately. The execution firewall fails
+            # open without the working orders, so a partial fetch that yielded
+            # positions but no orders would silently re-enable the duplicate
+            # submissions this exists to prevent.
+            fetched_open_orders = broker.get_open_orders()
+            positions = fetched_positions
+            open_orders = fetched_open_orders
             notes.append(
-                f"Fetched broker context with {len(positions)} open positions."
+                f"Fetched broker context with {len(positions)} open positions "
+                f"and {len(open_orders)} working order(s)."
             )
         except BrokerError as exc:
             notes.append(f"Broker context disabled: {exc}")
@@ -370,6 +379,7 @@ def _run_daily_scan_body(
                 filtered_decisions,
                 positions,
                 account,
+                open_orders,
             )
             guardrails.append(execution_intent_status)
             append_guardrail_note(notes, execution_intent_status)

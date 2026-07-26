@@ -114,10 +114,16 @@ fi
 echo "Config validates."
 
 if [[ "$MODE" == "with-cron" ]]; then
-	SCAN="$MONOREPO_ROOT/scripts/run_trading_bot_rehearsal.sh"
+	# run_trading_bot_daily.sh, NOT run_trading_bot_rehearsal.sh. The rehearsal
+	# script scans without executing and reports nothing; scheduling it would
+	# have produced a bot that decided trades, placed none, and never said so.
+	SCAN="$MONOREPO_ROOT/scripts/run_trading_bot_daily.sh"
 	echo
 	echo "Applying the daily scan job (see zeroclaw/cron/trading-bot-daily-scan.md)"
-	zeroclaw cron add '35 9 * * 1-5' "$SCAN" --agent tradingbot --tz America/Detroit
+	# 09:45, not 09:35: fifteen minutes past the open leaves the opening
+	# auction settled and keeps the scan clear of orders still filling from
+	# it. The 11:00 watchdog deadline is unaffected.
+	zeroclaw cron add '45 9 * * 1-5' "$SCAN" --agent tradingbot --tz America/Detroit
 fi
 
 echo

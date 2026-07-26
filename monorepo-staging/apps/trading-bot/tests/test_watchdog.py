@@ -101,14 +101,14 @@ class EvaluateTests(unittest.TestCase):
         self.assertIn("ever been recorded", msg.lower())
 
     def test_yesterday_scan_is_healthy_before_todays_deadline(self) -> None:
-        """At 08:00 today's 09:35 scan is not yet late."""
+        """At 08:00 today's 09:45 scan is not yet late."""
         with tempfile.TemporaryDirectory() as tmp:
             p = self._log(tmp, WEDNESDAY - timedelta(days=1))
             stale, _ = evaluate(p, now=WEDNESDAY.replace(hour=8))
         self.assertFalse(stale)
 
     def test_yesterday_scan_is_stale_after_todays_deadline(self) -> None:
-        """By midday, a scan due at 09:35 that never ran is a fault."""
+        """By midday, a scan due at 09:45 that never ran is a fault."""
         with tempfile.TemporaryDirectory() as tmp:
             p = self._log(tmp, WEDNESDAY - timedelta(days=1))
             stale, _ = evaluate(p, now=WEDNESDAY.replace(hour=12))
@@ -120,7 +120,7 @@ class MissedWeekdayCountingTests(unittest.TestCase):
         self.assertEqual(missed_weekdays(WEDNESDAY, WEDNESDAY.replace(hour=15)), 0)
 
     def test_today_not_counted_before_the_deadline(self) -> None:
-        """A scan due at 09:35 is not 'missed' when checked at 08:00."""
+        """A scan due at 09:45 is not 'missed' when checked at 08:00."""
         yesterday = WEDNESDAY - timedelta(days=1)
         self.assertEqual(missed_weekdays(yesterday, WEDNESDAY.replace(hour=8)), 0)
 

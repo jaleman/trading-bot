@@ -4,6 +4,7 @@ from trading_bot.models import (
     AccountSnapshot,
     GuardrailState,
     GuardrailStatus,
+    OrderResult,
     PositionSnapshot,
     StrategyConfig,
     TradeDecision,
@@ -145,8 +146,15 @@ def validate_execution_intents(
     decisions: list[TradeDecision],
     positions: list[PositionSnapshot],
     account: AccountSnapshot | None,
+    open_orders: list[OrderResult] | None = None,
 ) -> tuple[list[TradeDecision], GuardrailStatus]:
     positions_by_symbol = {position.symbol: position for position in positions}
+    # A working order at the broker still shows its shares in the position, so
+    # every position-based check below passes for a symbol that is already
+    # being sold. Without this the scan re-decides the same exit and submits a
+    # duplicate, and nothing in this process would stop it -- rejection would
+    # depend on the broker noticing the shares are held.
+    pending_symbols = {order.symbol for order in open_orders or []}
     seen_executable_symbols: set[str] = set()
     allowed: list[TradeDecision] = []
     blocked_reasons: list[str] = []
@@ -159,6 +167,12 @@ def validate_execution_intents(
         if decision.symbol in seen_executable_symbols:
             blocked_reasons.append(
                 f"Blocked duplicate executable action for {decision.symbol}."
+            )
+            continue
+
+        if decision.symbol in pending_symbols:
+            blocked_reasons.append(
+                f"Blocked {decision.action} for {decision.symbol} because an order is already working at the broker."
             )
             continue
 
@@ -205,6 +219,7 @@ def validate_execution_intents(
             "input_decisions": len(decisions),
             "allowed_decisions": len(allowed),
             "blocked_decisions": len(blocked_reasons),
+            "pending_order_symbols": sorted(pending_symbols),
         },
     )
 
