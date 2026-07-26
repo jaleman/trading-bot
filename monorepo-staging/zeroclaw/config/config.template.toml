@@ -87,6 +87,20 @@ num_ctx = 16384
 num_predict = 1024
 temperature = 0.2
 
+# Emergency stop. OFF by default in ZeroClaw, which means the kill switch
+# documented in docs/Security.md silently fails at the first command unless
+# this is enabled. Verified 2026-07-25: with this off, `zeroclaw estop`
+# returns "Emergency stop is disabled" and halts nothing.
+#
+# require_otp_to_resume defaults to TRUE, and resuming then fails with
+# "require_otp_to_resume=true but security.otp.enabled=false" -- engaging the
+# kill switch locks you out of un-engaging it. Verified the hard way on
+# 2026-07-25. A second factor to restart your own single-operator paper bot
+# buys nothing and risks a lockout during an actual incident.
+[security.estop]
+enabled = true
+require_otp_to_resume = false
+
 # Deny-by-default. The agent may run only the repo's own wrapper scripts, and
 # only inside the trading-bot tree. Adding a capability means adding a script
 # here deliberately, which is the point.

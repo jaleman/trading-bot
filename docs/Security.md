@@ -197,18 +197,43 @@ Run these tests **before the 90-day paper trading period ends** and before any l
 ### Test 7: Kill Switch
 **What we're testing:** You can immediately stop all bot activity in an emergency.
 
+> **CORRECTED 2026-07-25.** The procedure previously documented here
+> (`launchctl unload ~/Library/LaunchAgents/ai.openclaw.gateway.plist`) **no
+> longer works**. OpenClaw is not installed; the live service is
+> `com.zeroclaw.daemon`. `launchctl unload` on a missing plist exits without
+> error, so following the old steps would have failed *silently* while
+> appearing to succeed. See `SecurityAudit-2026-07-25.md`.
+
 **Emergency stop procedure (document and memorize):**
 ```bash
-# Stop OpenClaw
-launchctl unload ~/Library/LaunchAgents/ai.openclaw.gateway.plist
+zeroclaw estop                 # halt agent activity (kill_all)
+zeroclaw service stop          # stop the scheduler; no scans can fire
+brew services stop ollama      # stop local inference
 
-# Stop Ollama
-brew services stop ollama
-
-# Verify both are stopped
-launchctl list | grep openclaw
-pgrep ollama
+# Verify
+zeroclaw estop status          # engaged: yes
+pgrep -f "zeroclaw.*daemon"    # no output
+pgrep ollama                   # no output
 ```
+
+**To resume:**
+```bash
+zeroclaw service start
+zeroclaw estop resume
+brew services start ollama
+```
+
+**Executed and verified 2026-07-25:** full stop in 1s, restore in 6s — inside
+the 60-second pass criterion. Two prerequisites were discovered by running it,
+both now set in the repo-managed ZeroClaw config:
+
+- `security.estop.enabled` defaults to **false**, so `zeroclaw estop` returns
+  "Emergency stop is disabled" and halts nothing.
+- `security.estop.require_otp_to_resume` defaults to **true**, and resume then
+  fails because OTP is not configured — **engaging the kill switch locks you
+  out of releasing it.** Set to false.
+
+If the kill switch is ever re-tested on a fresh install, check both first.
 
 **How to test:**
 1. Run the kill switch commands above
