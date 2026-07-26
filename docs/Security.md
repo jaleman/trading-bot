@@ -24,6 +24,8 @@ These limits live in `strategy.json` and are enforced in `trader_agent.py` befor
 | Max simultaneous positions | 4 | Prevents over-concentration |
 | Max trades per day | 2 | Prevents runaway trading loop |
 | Max position size | 25% of portfolio | No single stock dominates |
+| Margin | none — unlevered | Validated return must be the strategy's, not the strategy's times leverage |
+| Short selling | disabled | Strategy is long-only; a bug must not be able to short |
 | Stop loss | 4–5% | Automatic exit on losing trade |
 | Profit target | 8–12% | Automatic exit on winning trade |
 | Paper-to-live gate | 3.75% / 90 days | No live capital until proven |
@@ -33,6 +35,31 @@ These limits live in `strategy.json` and are enforced in `trader_agent.py` befor
 - [ ] `trader_agent.py` reads and enforces this limit before calling `place_paper_trade()`
 - [ ] Bot logs a warning and halts if daily trade limit is reached
 - [ ] Position size check runs before every entry signal
+
+### 1.1a No-margin, long-only — decided 2026-07-25
+
+Sizing remains based on **portfolio value** (four 25% positions = 100% of
+equity). Buying power is deliberately *not* used as the sizing basis: at the
+account's former 4x multiplier that would have produced ~2.8x leverage.
+
+Enforced in two independent places:
+
+**At the broker** — Alpaca account configuration set to
+`max_margin_multiplier = 1` and `no_shorting = true`. Buying power collapsed
+from $275,063.94 to $1,848.59, exactly equal to cash, so the broker itself
+rejects any order that would borrow.
+
+**In code** — `trade_execution.calculate_qty()` caps each allocation by
+available cash, and `build_order_results()` decrements cash across the loop
+so two buys in one scan cannot each claim 25% of the portfolio. Sell proceeds
+are not credited within the same scan, since submitted is not settled and
+spending unsettled proceeds is how an unlevered account drifts into margin.
+`guardrails.evaluate_position_size()` additionally reports whenever buying
+power exceeds equity, so a change in account posture becomes visible.
+
+Rationale is measurement as much as risk: a levered result would not be the
+strategy's return, and the 90-day gate would validate something other than
+what is intended to run live.
 
 ---
 

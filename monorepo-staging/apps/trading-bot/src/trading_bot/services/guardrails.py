@@ -95,17 +95,47 @@ def evaluate_position_size(
     strategy: StrategyConfig,
     account: AccountSnapshot | None,
 ) -> GuardrailStatus:
+    """Check sizing inputs, and surface any reliance on borrowed funds.
+
+    This strategy is validated unlevered: buying power above equity means the
+    broker would finance a purchase on margin, which would make the measured
+    return the strategy's return times leverage rather than the strategy's.
+    """
+    if account is None or account.portfolio_value <= 0:
+        return GuardrailStatus(
+            name="position_size_limit",
+            allowed=False,
+            reasons=["Position sizing unavailable because account context is missing or empty."],
+            details={
+                "max_position_size_pct": strategy.max_position_size_pct,
+                "portfolio_value": account.portfolio_value if account is not None else 0,
+            },
+        )
+
+    reasons: list[str] = []
+    # Tolerance absorbs rounding; anything beyond it means real margin is on
+    # offer, which should be visible rather than silently available.
+    margin_available = account.buying_power > account.portfolio_value * 1.01
+    if margin_available:
+        reasons.append(
+            f"Margin appears available (buying power {account.buying_power:.2f} "
+            f"exceeds equity {account.portfolio_value:.2f}); this strategy is "
+            "validated unlevered."
+        )
+
     return GuardrailStatus(
         name="position_size_limit",
-        allowed=account is not None and account.portfolio_value > 0,
-        reasons=(
-            []
-            if account is not None and account.portfolio_value > 0
-            else ["Position sizing unavailable because account context is missing or empty."]
-        ),
+        # Advisory, not blocking: sizing is already capped to cash in
+        # trade_execution, so a levered purchase cannot be constructed. This
+        # records the account posture so a change is noticed.
+        allowed=True,
+        reasons=reasons,
         details={
             "max_position_size_pct": strategy.max_position_size_pct,
-            "portfolio_value": account.portfolio_value if account is not None else 0,
+            "portfolio_value": account.portfolio_value,
+            "cash": account.cash,
+            "buying_power": account.buying_power,
+            "margin_available": margin_available,
         },
     )
 
