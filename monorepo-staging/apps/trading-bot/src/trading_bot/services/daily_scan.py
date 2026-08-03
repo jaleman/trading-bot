@@ -395,8 +395,11 @@ def _run_daily_scan_body(
                         strategy.max_position_size_pct,
                         broker.place_paper_trade,
                     )
-                    if order_results:
-                        guardrail_state = guardrail_store.increment_trades(len(order_results))
+                    buy_order_count = sum(
+                        1 for result in order_results if result.side.upper().endswith("BUY")
+                    )
+                    if buy_order_count:
+                        guardrail_state = guardrail_store.increment_trades(buy_order_count)
                     notes.append(
                         f"Executed {len(order_results)} paper-trade orders from decision output."
                     )

@@ -39,6 +39,11 @@ def evaluate_trade_limits(
     buy_decisions = [item for item in decisions if item.action == "buy"]
     other_decisions = [item for item in decisions if item.action != "buy"]
 
+    # state.trades_today counts buys only (see daily_scan.py's increment_trades
+    # call) -- mandatory stop-loss/profit-target exits pass through unfiltered
+    # below and never consume this budget, so a same-day sell frees its
+    # position slot for a same-day buy instead of sitting empty until the
+    # next scan.
     remaining_trade_budget = max(strategy.max_trades_per_day - state.trades_today, 0)
     remaining_position_slots = max(strategy.max_positions - len(positions), 0)
     buy_allowance = min(remaining_trade_budget, remaining_position_slots)

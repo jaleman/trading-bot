@@ -19,6 +19,7 @@ from trading_bot.models import (  # noqa: E402
     IndicatorSnapshot,
     LocalAnalysisItem,
     LocalAnalysisResult,
+    OrderResult,
     PositionSnapshot,
     TradeDecision,
 )
@@ -357,6 +358,55 @@ class DailyScanGuardrailTests(unittest.TestCase):
         self.assertEqual([item.action for item in summary.decisions], ["sell"])
         self.assertEqual([item.symbol for item in summary.decisions], ["JPM"])
         self.assertTrue(any("Exit signal confirmed" in item.reason for item in summary.decisions))
+
+    @patch("trading_bot.services.daily_scan.ensure_runtime_dirs", side_effect=lambda p: p)
+    @patch("trading_bot.services.daily_scan.resolve_paths")
+    def test_executed_sell_does_not_consume_daily_trade_budget(self, mock_paths: MagicMock, _mock_dirs: MagicMock) -> None:
+        """A mandatory stop-loss exit must not spend the buy budget for the day.
+
+        Previously trades_today counted every executed order, buy or sell, so
+        two same-day stop-loss exits could exhaust max_trades_per_day and
+        block a same-day buy even though the exits had just freed up position
+        slots.
+        """
+        self.write_strategy(safe_mode=False, paper_enabled=True)
+        self.write_guardrail_state()
+        mock_paths.return_value = self.paths
+
+        fake_market = MagicMock()
+        fake_market.get_all_indicators.return_value = [
+            IndicatorSnapshot(symbol="JPM", current_price=100, ma_20=98, ma_50=101, rsi=45)
+        ]
+        fake_broker = MagicMock()
+        fake_broker.get_account_balance.return_value = AccountSnapshot(cash=1000, portfolio_value=1000, buying_power=1000)
+        fake_broker.get_open_positions.return_value = [
+            PositionSnapshot(
+                symbol="JPM",
+                qty=5,
+                avg_entry_price=90,
+                current_price=100,
+                unrealized_pl=50,
+                unrealized_plpc=0.11,
+            )
+        ]
+        fake_broker.get_open_orders.return_value = []
+        fake_broker.place_paper_trade.side_effect = lambda symbol, qty, side: OrderResult(
+            id="order-1", symbol=symbol, qty=qty,
+            side=f"OrderSide.{side.upper()}", status="OrderStatus.PENDING_NEW",
+        )
+
+        with patch("trading_bot.services.daily_scan.AlpacaMarketDataClient", return_value=fake_market), \
+             patch("trading_bot.services.daily_scan.AlpacaBrokerClient", return_value=fake_broker):
+            summary = run_daily_scan(
+                include_market_data=True,
+                include_decisions=True,
+                include_broker_context=True,
+                execute_paper_trades=True,
+            )
+
+        self.assertEqual([item.action for item in summary.decisions], ["sell"])
+        self.assertEqual(len(summary.order_results), 1)
+        self.assertEqual(summary.guardrail_state.trades_today, 0)
 
     @patch("trading_bot.services.daily_scan.ensure_runtime_dirs", side_effect=lambda p: p)
     @patch("trading_bot.services.daily_scan.resolve_paths")
