@@ -123,20 +123,53 @@ Note this shares the ZeroClaw scheduler with the scan, so it cannot report
 ZeroClaw itself being down. That gap is covered by the absence of the daily
 summary: no message by 09:50 on a weekday is itself the signal.
 
+## Companion job: weekly decision report
+
+Added 2026-08-03, after the first live week raised the question of *why* the
+strategy did what it did, not just whether the scan ran. `trades.jsonl` already
+carries a plain-English reason for every decision; this job turns a week of it
+into a single PDF a non-technical reader (e.g. a financial advisor) can follow.
+
+```
+zeroclaw cron add '0 9 * * 6' \
+  '<REPO_ROOT>/monorepo-staging/scripts/run_trading_bot_weekly_report.sh' \
+  --agent tradingbot \
+  --tz America/Detroit
+```
+
+Runs Saturday morning, after the watchdog's Friday check and clear of the
+trading week entirely. `--last-full-week` (baked into the wrapper) always
+resolves to the most recently completed Monday-Friday window, so it's correct
+regardless of which day it actually runs.
+
+Unlike the other three jobs, this one needs `reportlab`, which has no business
+in the trading runtime's venv (see `build_executive_summary.py`'s docstring for
+the same reasoning). A cron job can't interactively create a throwaway venv
+and `pip install` over the network every run without that failure becoming
+silent, so `run_trading_bot_weekly_report.sh` maintains its own small
+persistent venv at `monorepo-staging/.report-venv`, built once on first run and
+reused after. Output lands in `<REPO_ROOT>/reports/` (gitignored — these are
+personal financial documents, not repo content).
+
+`run_trading_bot_weekly_report.sh` is in `allowed_commands` in
+`config/config.template.toml`, deployed via `sync_zeroclaw_config.sh`.
+
 ## Status
 
-**NOT YET ACTIVE — ready to apply.** Everything that gated this is done: the
-guardrails drift audit (`docs/SecurityAudit-2026-07-25.md`), the repaired and
-tested kill switch, Telegram delivery, and the supervised rehearsal on
-2026-07-26.
+**ACTIVE since 2026-07-27.** All four jobs — scan, backup, watchdog, and the
+weekly decision report — are applied and confirmed running via
+`zeroclaw cron list`. The first live week (2026-07-27 to 2026-08-03) ran
+clean: 6/6 scheduled scans executed, no missed runs, no guardrail or firewall
+blocks, Telegram delivered every day.
 
-The dormancy cleanup has **already happened**: that rehearsal sold PFE and
-COST on the stop-loss rule. LIN and NEE remain open. So the first scheduled
-run is an ordinary trading day, not a cleanup — see the step 5 section in
-`todo.md`.
+The dormancy cleanup **already happened** before this window: the 2026-07-26
+rehearsal sold PFE and COST on the stop-loss rule. LIN and NEE remain open
+from that rehearsal. The gate's measurement clock starts at 2026-07-27 (see
+`paper_to_live.clock_start` in `strategy.local.json`), so the earlier PFE/COST
+losses are excluded from the 90-day evaluation.
 
-Two defects the rehearsal found, both fixed, both of which would have made
-these jobs useless in the same silent way:
+Two defects the original 2026-07-26 rehearsal found, both fixed, both of which
+would have made these jobs useless in the same silent way:
 
 - `run_trading_bot_daily.sh` did not pass `--execute-paper-trades`, so the
   scheduled scan would have decided trades and placed none.
@@ -145,5 +178,5 @@ these jobs useless in the same silent way:
   which neither executes nor reports, so applying the job as documented would
   have bypassed the fix above *and* sent no Telegram summary at all.
 
-Apply all three jobs together. `--with-cron` currently adds only the scan;
-the backup and watchdog are still added by hand from this file.
+`--with-cron` currently adds only the scan; the backup, watchdog, and weekly
+report are still added by hand from this file.

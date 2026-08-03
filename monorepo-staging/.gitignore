@@ -2,6 +2,7 @@
 .env
 .env.*
 .venv/
+.report-venv/
 __pycache__/
 *.pyc
 *.egg-info/

@@ -45,6 +45,7 @@ three that are now on a schedule.
 - `run_trading_bot_reconciliation.sh` — read-only; compares the bot's order record against Alpaca, computes FIFO realised P/L and the consecutive-loss run. Places no orders
 - `run_trading_bot_read_model.sh` — `rebuild`, `metrics`, or `query` against the derived SQLite projection of `trades.jsonl`
 - `build_executive_summary.py` — generates the shareable executive-summary PDF. Needs `reportlab`, which is deliberately **not** in the app venv; see the module docstring, and refresh its `LIVE` figures before regenerating
+- `build_weekly_decision_report.py` — generates a day-by-day buy/sell/hold rationale PDF straight from `trades.jsonl`, entirely data-driven (no figures to hand-refresh). Same throwaway `reportlab` venv as above. `--days N` (default 7), or `--start`/`--end` for an explicit range
 
 **Deployment**
 
