@@ -119,6 +119,29 @@ class ReadModelTests(unittest.TestCase):
         self.assertEqual(metrics["peak_value"], 110_000.0)
         self.assertEqual(metrics["max_drawdown_from_peak_pct"], -5.0)
 
+    def test_gate_metrics_scopes_to_clock_start_and_uses_baseline(self) -> None:
+        """A clock_start must exclude pre-launch history from the gate window."""
+        self._write([
+            _entry("dormant", "2026-03-01T09:00:00", portfolio_value=200_000.0),
+            _entry("r1", "2026-07-27T09:00:00", portfolio_value=97_444.87),
+            _entry("r2", "2026-07-28T09:00:00", portfolio_value=99_161.47),
+            _entry("r3", "2026-07-31T09:00:00", portfolio_value=93_316.10),
+        ])
+        model = ScanReadModel(self.db)
+        model.rebuild(self.jsonl)
+
+        metrics = model.gate_metrics(
+            clock_start="2026-07-27T00:00:00", baseline_value=97_444.87
+        )
+
+        self.assertEqual(metrics["runs"], 3)
+        self.assertEqual(metrics["starting_value"], 97_444.87)
+        self.assertEqual(metrics["peak_value"], 99_161.47)
+        self.assertEqual(
+            metrics["return_pct"],
+            round((93_316.10 - 97_444.87) / 97_444.87 * 100, 2),
+        )
+
     def test_gate_metrics_does_not_fabricate_consecutive_losses(self) -> None:
         """Realized round-trip P/L belongs to Alpaca, not inferred from scans."""
         self._write([_entry("r1", "2026-03-01T09:00:00")])

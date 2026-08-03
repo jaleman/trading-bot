@@ -228,35 +228,58 @@ class ScanReadModel:
         conn.executemany("INSERT INTO guardrails VALUES (?,?,?,?,?)", rows)
         return len(rows)
 
-    def gate_metrics(self) -> dict:
+    def gate_metrics(
+        self, clock_start: str | None = None, baseline_value: float | None = None
+    ) -> dict:
         """Portfolio-level metrics for the paper-to-live gate.
+
+        `clock_start` scopes the window to runs at or after that timestamp.
+        Without it, every run ever logged counts — including the dormant
+        March-April history and the 2026-07-26 rehearsal cleanup — which
+        would badly distort the 90-day evaluation. `baseline_value` anchors
+        the return/drawdown calculation to the portfolio value recorded at
+        clock_start, rather than whatever the first in-window run happened
+        to report.
 
         Deliberately does NOT report consecutive losing *trades*. That needs
         realized round-trip P/L, and Alpaca -- not this log -- is the system of
         record for fills. Deriving it here would be inference presented as fact;
         it belongs in the Alpaca reconciliation step instead.
         """
+        window_clause = " AND timestamp >= ?" if clock_start else ""
+        window_params = (clock_start,) if clock_start else ()
+
         with sqlite3.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
             rows = conn.execute(
                 "SELECT timestamp, portfolio_value FROM runs "
-                "WHERE portfolio_value IS NOT NULL ORDER BY timestamp"
+                "WHERE portfolio_value IS NOT NULL" + window_clause +
+                " ORDER BY timestamp",
+                window_params,
             ).fetchall()
             degraded = conn.execute(
-                "SELECT COUNT(*) FROM runs WHERE degraded = 1"
+                "SELECT COUNT(*) FROM runs WHERE degraded = 1" + window_clause,
+                window_params,
             ).fetchone()[0]
-            total_runs = conn.execute("SELECT COUNT(*) FROM runs").fetchone()[0]
+            total_runs = conn.execute(
+                "SELECT COUNT(*) FROM runs"
+                + (" WHERE timestamp >= ?" if clock_start else ""),
+                window_params,
+            ).fetchone()[0]
 
         if not rows:
             return {"runs": total_runs, "valued_runs": 0,
                     "note": "No portfolio values recorded."}
 
-        first, last = rows[0]["portfolio_value"], rows[-1]["portfolio_value"]
-        peak = max(r["portfolio_value"] for r in rows)
+        first = baseline_value if baseline_value is not None else rows[0]["portfolio_value"]
+        last = rows[-1]["portfolio_value"]
+        peak = max([first, *(r["portfolio_value"] for r in rows)])
+        peak_timestamp = (
+            clock_start if peak == first and baseline_value is not None
+            else next(x["timestamp"] for x in rows if x["portfolio_value"] == peak)
+        )
         trough_after_peak = min(
-            (r["portfolio_value"] for r in rows
-             if r["timestamp"] >= next(x["timestamp"] for x in rows
-                                       if x["portfolio_value"] == peak)),
+            (r["portfolio_value"] for r in rows if r["timestamp"] >= peak_timestamp),
             default=peak,
         )
 
@@ -264,6 +287,7 @@ class ScanReadModel:
             "runs": total_runs,
             "valued_runs": len(rows),
             "degraded_runs": degraded,
+            "clock_start": clock_start,
             "first_timestamp": rows[0]["timestamp"],
             "last_timestamp": rows[-1]["timestamp"],
             "starting_value": first,
@@ -280,11 +304,24 @@ class ScanReadModel:
         }
 
 
-def _default_paths() -> tuple[Path, Path]:
+def _default_paths() -> tuple[Path, Path, Path]:
     from trading_bot.runtime_paths import resolve_paths
 
     paths = resolve_paths()
-    return paths.database_dir / "scans.db", paths.trade_log.with_suffix(".jsonl")
+    return (
+        paths.database_dir / "scans.db",
+        paths.trade_log.with_suffix(".jsonl"),
+        paths.strategy_config,
+    )
+
+
+def _load_gate_window(strategy_config: Path) -> tuple[str | None, float | None]:
+    """Read the paper-to-live clock-start and baseline from the strategy config."""
+    if not strategy_config.exists():
+        return None, None
+    config = json.loads(strategy_config.read_text(encoding="utf-8"))
+    window = config.get("paper_to_live") or {}
+    return window.get("clock_start"), window.get("baseline_portfolio_value")
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -299,14 +336,18 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--jsonl", dest="jsonl_path")
     args = parser.parse_args(argv)
 
-    default_db, default_jsonl = _default_paths()
+    default_db, default_jsonl, default_strategy = _default_paths()
     model = ScanReadModel(args.db_path or default_db)
 
     if args.command == "rebuild":
         stats = model.rebuild(args.jsonl_path or default_jsonl)
         print(json.dumps({"database": str(model.db_path), **stats}, indent=2))
     elif args.command == "metrics":
-        print(json.dumps(model.gate_metrics(), indent=2))
+        clock_start, baseline_value = _load_gate_window(default_strategy)
+        print(json.dumps(
+            model.gate_metrics(clock_start=clock_start, baseline_value=baseline_value),
+            indent=2,
+        ))
     else:
         if not args.sql:
             parser.error("query requires a SQL statement")

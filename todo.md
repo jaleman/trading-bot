@@ -16,15 +16,25 @@ Updated: 2026-07-25 (Phase 0/1 reassessment session — see WORKFLOW.md)
   1. ~~Supervised end-to-end rehearsal + Telegram delivery.~~ **DONE
      2026-07-26** — see "Step 5 supervised rehearsal" below. It found and
      fixed a defect that would have made the scheduled job never trade.
-  2. Apply the three cron jobs together — scan **09:45**, Drive backup 10:15,
-     watchdog 11:00 — via `sync_zeroclaw_config.sh --with-cron` plus the two
-     companion jobs in `zeroclaw/cron/trading-bot-daily-scan.md`. Safe to run
-     unattended: see "Unattended-safe activation" below.
-  3. Record the clock-start date and baseline portfolio value so
-     `gate_metrics` measures the right window. **The dormancy cleanup already
-     happened** — PFE and COST were sold during the 2026-07-26 rehearsal, so
-     those two realised losses land on 07-26 and are *not* strategy results.
-     Start the measurement window after them.
+  2. ~~Apply the three cron jobs together.~~ **DONE 2026-07-26** — scan
+     **09:45**, Drive backup 10:15, watchdog 11:00, all confirmed live via
+     `zeroclaw cron list` and running clean for a full week (2026-07-27
+     through 2026-08-03, 6/6 scheduled weekdays, no missed runs, no guardrail
+     or firewall blocks, Telegram delivered every day).
+  3. ~~Record the clock-start date and baseline portfolio value.~~ **DONE
+     2026-08-03.** `gate_metrics()` in `read_model.py` previously used
+     `rows[0]` — the earliest row ever logged in `scans.db` — as the return
+     baseline, which reached back through the dormant March–April history and
+     the 2026-07-26 rehearsal. Added `clock_start` /
+     `baseline_portfolio_value` to `paper_to_live` in `strategy.local.json`
+     (`2026-07-27T00:00:00` / `97444.87`, the portfolio value right after
+     PFE/COST were sold in the rehearsal), added matching `null` placeholders
+     to `strategy.example.json`, and taught `gate_metrics()` to accept both
+     params and filter/anchor on them. Verified against live data: the gate
+     now reports exactly the 6 in-window runs (`return_pct: -4.55`,
+     `max_drawdown_from_peak_pct: -6.2`) instead of including the 50
+     pre-launch rows. New test:
+     `test_gate_metrics_scopes_to_clock_start_and_uses_baseline`.
   4. Then steps 6–7: the strategy plug-in interface, and the shadow advisor
      — design note for step 7 is below ("Step 7 design note — shadow advisor
      decision capture"), and it is deliberately sequenced *after* activation.

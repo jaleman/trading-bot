@@ -52,6 +52,8 @@
   "paper_to_live": {
     "min_return_pct": 3.75,
     "evaluation_days": 90,
-    "max_consecutive_losses": 2
+    "max_consecutive_losses": 2,
+    "clock_start": null,
+    "baseline_portfolio_value": null
   }
 }
